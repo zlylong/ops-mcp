@@ -2,41 +2,83 @@ package audit
 
 import (
 	"log/slog"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
+
+	"github.com/zlylong/ops-mcp/backend/internal/domain"
 )
 
-type Event struct {
-	ID       string    `json:"id"`
-	At       time.Time `json:"at"`
-	Actor    string    `json:"actor"`
-	Action   string    `json:"action"`
-	Target   string    `json:"target"`
-	Approved bool      `json:"approved"`
-	Allowed  bool      `json:"allowed"`
-	Reason   string    `json:"reason"`
-}
-
 type Recorder interface {
-	Record(Event)
-	List() []Event
+	Record(domain.AuditRecord) domain.AuditRecord
+	List() []domain.AuditRecord
 }
 
-type Logger struct {
-	logger *slog.Logger
-	events []Event
+type Store struct {
+	logger  *slog.Logger
+	mu      sync.RWMutex
+	records []domain.AuditRecord
 }
 
-func NewLogger(logger *slog.Logger) *Logger {
-	return &Logger{logger: logger, events: make([]Event, 0, 32)}
+func NewStore(logger *slog.Logger) *Store {
+	return &Store{logger: logger, records: make([]domain.AuditRecord, 0, 64)}
 }
 
-func (l *Logger) Record(event Event) {
-	l.events = append(l.events, event)
-	l.logger.Info("audit", "id", event.ID, "actor", event.Actor, "action", event.Action, "target", event.Target, "approved", event.Approved, "allowed", event.Allowed, "reason", event.Reason)
+func (s *Store) Record(record domain.AuditRecord) domain.AuditRecord {
+	if record.ID == "" {
+		record.ID = newID("aud")
+	}
+	if record.At.IsZero() {
+		record.At = time.Now().UTC()
+	}
+	record.Parameters = Mask(record.Parameters)
+	s.mu.Lock()
+	s.records = append([]domain.AuditRecord{record}, s.records...)
+	s.mu.Unlock()
+	if s.logger != nil {
+		s.logger.Info("audit", "id", record.ID, "executionId", record.ExecutionID, "actor", record.Actor, "role", record.Role, "action", record.Action, "target", record.Target, "allowed", record.Allowed, "reason", record.Reason)
+	}
+	return record
 }
 
-func (l *Logger) List() []Event {
-	out := make([]Event, len(l.events))
-	copy(out, l.events)
+func (s *Store) List() []domain.AuditRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]domain.AuditRecord, len(s.records))
+	copy(out, s.records)
 	return out
+}
+
+func Mask(input map[string]any) map[string]any {
+	if input == nil {
+		return nil
+	}
+	out := make(map[string]any, len(input))
+	for key, value := range input {
+		if isSensitiveKey(key) {
+			out[key] = "***MASKED***"
+			continue
+		}
+		if nested, ok := value.(map[string]any); ok {
+			out[key] = Mask(nested)
+			continue
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func isSensitiveKey(key string) bool {
+	k := strings.ToLower(key)
+	for _, marker := range []string{"password", "secret", "token", "api_key", "apikey", "authorization", "credential"} {
+		if strings.Contains(k, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func newID(prefix string) string {
+	return prefix + "-" + strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
 }

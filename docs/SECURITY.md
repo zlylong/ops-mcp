@@ -1,34 +1,55 @@
 # Security
 
+## Security-first backend flow
+
+Every tool execution must pass through:
+
+1. Tool Registry lookup
+2. Input validation
+3. Policy Engine evaluation
+4. Adapter execution only if allowed
+5. Audit Record creation
+6. Execution History persistence
+
 ## Non-goals and prohibited capabilities
 
 The platform intentionally does not implement:
 
 - Arbitrary shell execution
 - `kubectl exec`
-- Delete namespace
-- Delete PVC
+- Namespace deletion
+- PVC deletion
+- Workload/resource deletion tools
+- Hardcoded credentials
 
-Requests for these tools are blocked and audited.
+Requests for unknown, unsafe, or future critical tools must be denied by default.
 
-## Production write protection
+## Policy rules
 
-Any tool marked as write-capable requires `approved: true` when `OPS_MCP_ENV=production`. Without approval the API returns `409 approval_required` and writes an audit event.
+- `viewer` can execute read-only tools.
+- `operator` can execute medium-risk write tools only in `development` or `staging`.
+- Production write operations require explicit approval.
+- Critical tools are denied by default, even for admin, until a future reviewed policy explicitly allows them.
 
-## Auditability
+## Audit masking
 
-Every tool execution attempt records:
+Audit records mask sensitive input fields. Keys containing these markers are replaced with `***MASKED***`:
 
-- Audit ID
-- Timestamp
-- Actor
-- Action/tool
-- Target
-- Approval flag
-- Allowed/blocked result
-- Reason
+- `password`
+- `secret`
+- `token`
+- `api_key`
+- `apikey`
+- `authorization`
+- `credential`
 
-The mock implementation stores audit events in memory and emits structured logs to stdout. A production implementation should persist audit events to PostgreSQL with immutable retention.
+## Mock mode
+
+`OPS_MCP_MODE=mock` is the default. Mock adapters return deterministic Kubernetes and Prometheus data and do not contact external infrastructure.
+
+## PostgreSQL
+
+The MVP includes PostgreSQL connection support and Docker Compose PostgreSQL. In mock mode, execution history, approvals, and audit records are stored in memory. A production implementation should persist these records to PostgreSQL with immutable audit retention.
 
 ## Secrets
 

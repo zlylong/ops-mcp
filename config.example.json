@@ -1,0 +1,7 @@
+{
+  "addr": ":8080",
+  "mode": "mock",
+  "environment": "development",
+  "databaseUrl": "postgres://ops_mcp:ops_mcp@postgres:5432/ops_mcp?sslmode=disable",
+  "redisUrl": "redis://redis:6379/0"
+}

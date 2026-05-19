@@ -10,7 +10,7 @@ frontend-dev:
 	cd frontend && npm install && npm run dev
 
 test:
-	go test ./backend/...
+	go test ./...
 	cd frontend && npm install && npm run lint
 
 lint:
