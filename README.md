@@ -45,6 +45,8 @@ http://localhost:5173
 
 The frontend proxies `/api` requests to the backend container, so no extra configuration is needed.
 
+The language selector in the top bar can switch the web UI between English and Chinese. The selected language is saved in the browser.
+
 ## 3. How to login or use mock user
 
 There is no password login in this MVP. Use the built-in mock identity when executing tools:
