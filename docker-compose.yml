@@ -1,0 +1,40 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      OPS_MCP_ADDR: ":8080"
+      OPS_MCP_MODE: "mock"
+      OPS_MCP_ENV: "development"
+      DATABASE_URL: "postgres://ops_mcp:ops_mcp@postgres:5432/ops_mcp?sslmode=disable"
+      REDIS_URL: "redis://redis:6379/0"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ops_mcp
+      POSTGRES_PASSWORD: ops_mcp
+      POSTGRES_DB: ops_mcp
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+volumes:
+  postgres_data:

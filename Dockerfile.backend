@@ -1,0 +1,10 @@
+FROM golang:1.24-bookworm AS build
+WORKDIR /src
+COPY go.mod ./
+COPY backend ./backend
+RUN go build -o /out/ops-mcp ./backend/cmd/server
+FROM debian:13-slim
+COPY --from=build /out/ops-mcp /usr/local/bin/ops-mcp
+ENV OPS_MCP_ADDR=:8080 OPS_MCP_MODE=mock
+EXPOSE 8080
+CMD ["ops-mcp"]

@@ -1,0 +1,1 @@
+body { margin: 0; background: #f5f7fb; } .app { min-height: 100vh; } .header { display:flex; gap:16px; align-items:center; background:#fff; border-bottom:1px solid #eef0f3; } .header h3 { margin:0; } .content { padding:24px; max-width:1180px; width:100%; margin:0 auto; } .stats,.section { margin-top:16px; } code { background:#f1f3f5; padding:2px 6px; border-radius:4px; }

@@ -1,0 +1,20 @@
+# Go
+/bin/
+*.test
+coverage.out
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/tsconfig.tsbuildinfo
+
+# Local env/data
+.env
+.env.local
+.data/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
