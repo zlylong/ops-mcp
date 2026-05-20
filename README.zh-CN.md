@@ -13,7 +13,7 @@
 - Tool Registry、Policy Engine、Audit System、Execution History 和 Approval Flow 骨架
 - Kubernetes mock adapter
 - Prometheus mock adapter
-- `docs/` 目录中的文档
+- `docs/` 目录中的文档，包含面向新手的工具中心使用文档
 
 ## 1. 如何启动项目
 
@@ -179,6 +179,14 @@ go run ./backend/cmd/server --config config.example.json
 - `VITE_API_BASE` 可选显式 API base URL。为空时表示同源/proxy。
 - `VITE_MOCK_API=true` 启用浏览器侧 mock API client，用于无后端 UI 演示。
 
+## 用户文档
+
+- [工具中心使用文档](docs/TOOL_CENTER.zh-CN.md)：面向新手，详细说明工具搜索、查看、执行、新增、编辑、删除、审批和审计逻辑。
+- [API 文档](docs/API.zh-CN.md)：HTTP API 与默认工具目录。
+- [测试指南](docs/TESTING.zh-CN.md)：后端测试策略与命令。
+- [安全指南](docs/SECURITY.zh-CN.md)：安全保证、脱敏和策略边界。
+- [架构文档](docs/ARCHITECTURE.zh-CN.md)：后端/前端结构和请求流。
+
 ## 前端 MVP 页面
 
 前端包含左侧菜单布局、顶部环境选择器、顶部集群选择器和用户区域。已实现页面：
@@ -195,17 +203,37 @@ go run ./backend/cmd/server --config config.example.json
 
 ## 已实现工具
 
+默认 mock mode 包含 Kubernetes、Prometheus 和常用 Linux 工具。
+
+Linux 工具：
+
+- `linux.system_info`
+- `linux.load_average`
+- `linux.memory_usage`
+- `linux.disk_usage`
+- `linux.process_list`
+- `linux.network_interfaces`
+- `linux.service_status`
+- `linux.journal_tail`
+- `linux.ping`
+- `linux.dns_lookup`
+
+Kubernetes 工具：
+
 - `k8s.list_pods`
 - `k8s.get_pod_logs`
 - `k8s.list_events`
 - `k8s.get_deployment_status`
+
+Prometheus 工具：
+
 - `prometheus.query`
 - `prometheus.service_error_rate`
 - `prometheus.service_latency_p95`
 - `prometheus.pod_cpu_usage`
 - `prometheus.pod_memory_usage`
 
-当前所有工具都是只读 mock 工具。每次执行都会经过输入校验、Policy Engine、Audit System 和 Execution History。
+当前默认工具都是 mock 工具。大多数为只读工具；`linux.journal_tail` 为中风险并需要审批。每次执行都会经过输入校验、Policy Engine、必要时的 Approval Flow、Audit System 和 Execution History。
 
 ## MVP 安全保证
 

@@ -13,7 +13,7 @@ Go-based Ops MCP platform with a React + TypeScript + Vite frontend. The default
 - Tool Registry, Policy Engine, Audit System, Execution History, and Approval Flow skeleton
 - Kubernetes mock adapter
 - Prometheus mock adapter
-- Documentation in `docs/`
+- Documentation in `docs/`, including a beginner-friendly Tool Center guide
 
 ## 1. How to start the project
 
@@ -179,6 +179,14 @@ Frontend environment variables:
 - `VITE_API_BASE` optional explicit API base URL. Empty means same-origin/proxy.
 - `VITE_MOCK_API=true` enables the browser-side mock API client for UI-only demos without backend.
 
+## User guides
+
+- [Tool Center User Guide](docs/TOOL_CENTER.md): beginner-friendly guide for searching, viewing, executing, creating, editing, deleting, approving, and auditing tools.
+- [API Documentation](docs/API.md): HTTP API and default tool catalog.
+- [Testing Guide](docs/TESTING.md): backend test strategy and commands.
+- [Security Guide](docs/SECURITY.md): safety guarantees, masking, and policy boundaries.
+- [Architecture](docs/ARCHITECTURE.md): backend/frontend structure and request flow.
+
 ## Frontend MVP pages
 
 The frontend includes a left sidebar layout, top environment selector, top cluster selector, and user area. Implemented pages:
@@ -195,17 +203,37 @@ The frontend includes a left sidebar layout, top environment selector, top clust
 
 ## Implemented tools
 
+Default mock mode includes Kubernetes, Prometheus, and common Linux tools.
+
+Linux tools:
+
+- `linux.system_info`
+- `linux.load_average`
+- `linux.memory_usage`
+- `linux.disk_usage`
+- `linux.process_list`
+- `linux.network_interfaces`
+- `linux.service_status`
+- `linux.journal_tail`
+- `linux.ping`
+- `linux.dns_lookup`
+
+Kubernetes tools:
+
 - `k8s.list_pods`
 - `k8s.get_pod_logs`
 - `k8s.list_events`
 - `k8s.get_deployment_status`
+
+Prometheus tools:
+
 - `prometheus.query`
 - `prometheus.service_error_rate`
 - `prometheus.service_latency_p95`
 - `prometheus.pod_cpu_usage`
 - `prometheus.pod_memory_usage`
 
-All current tools are read-only mock tools. Every execution goes through input validation, Policy Engine, Audit System, and Execution History.
+All default tools are mock tools. Most are read-only; `linux.journal_tail` is medium risk and requires approval. Every execution goes through input validation, Policy Engine, Approval Flow when required, Audit System, and Execution History.
 
 ## Safety guarantees in this MVP
 
