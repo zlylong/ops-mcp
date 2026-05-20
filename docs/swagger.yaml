@@ -1,0 +1,243 @@
+basePath: /api/v1
+host: localhost:8080
+info:
+  contact:
+    email: support@ops-mcp.local
+    name: API Support
+    url: http://localhost:8080
+  description: Ops MCP Backend API with Tool Registry, Policy Engine, and Approval
+    Flow.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: Ops MCP API
+  version: "1.0"
+paths:
+  /approvals:
+    get:
+      description: Returns a list of pending approvals
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+      summary: List Approvals
+      tags:
+      - approvals
+  /approvals/{id}/approve:
+    post:
+      consumes:
+      - application/json
+      description: Approves a pending execution request
+      parameters:
+      - description: Approval ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Action request
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Approve Execution
+      tags:
+      - approvals
+  /approvals/{id}/reject:
+    post:
+      consumes:
+      - application/json
+      description: Rejects a pending execution request
+      parameters:
+      - description: Approval ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Action request
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Reject Execution
+      tags:
+      - approvals
+  /audit:
+    get:
+      description: Returns a list of audit records with filtering options
+      parameters:
+      - description: Filter by actor
+        in: query
+        name: actor
+        type: string
+      - description: Filter by tool
+        in: query
+        name: tool
+        type: string
+      - description: Filter by environment
+        in: query
+        name: env
+        type: string
+      - description: Filter by risk level
+        in: query
+        name: risk
+        type: string
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+      summary: List Audit Records
+      tags:
+      - audit
+  /dashboard/summary:
+    get:
+      description: Returns dashboard statistics including alerts, approvals, and executions
+        count
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get Dashboard Summary
+      tags:
+      - dashboard
+  /healthz:
+    get:
+      description: Returns the health status of the API
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health Check
+      tags:
+      - system
+  /tools:
+    get:
+      description: Returns a list of all available tools
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+      summary: List All Tools
+      tags:
+      - tools
+  /tools/{name}:
+    get:
+      description: Returns detailed information about a specific tool
+      parameters:
+      - description: Tool name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get Tool Details
+      tags:
+      - tools
+  /tools/{name}/execute:
+    post:
+      consumes:
+      - application/json
+      description: Executes a tool with the provided parameters
+      parameters:
+      - description: Tool name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Execution request
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Immediate execution result
+          schema:
+            additionalProperties: true
+            type: object
+        "202":
+          description: Execution accepted, requires approval
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Permission denied
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Tool not found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Execute Tool
+      tags:
+      - tools
+swagger: "2.0"

@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/swaggo/gin-swagger"
+	swaggerFiles "github.com/swaggo/files"
 	"github.com/zlylong/ops-mcp/backend/internal/app"
 	"github.com/zlylong/ops-mcp/backend/internal/audit"
 	"github.com/zlylong/ops-mcp/backend/internal/config"
@@ -23,6 +25,10 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 	r.Use(gin.Recovery(), cors())
 	s := &Server{cfg: cfg, registry: registry, auditor: auditor, logger: logger}
 	r.GET("/healthz", s.health)
+	
+	// Swagger UI
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.NewHandler(), ginSwagger.URL("/docs/swagger.json")))
+	
 	v1 := r.Group("/api/v1")
 	v1.GET("/dashboard/summary", s.dashboardSummary)
 	v1.GET("/tools", s.tools)
@@ -53,13 +59,7 @@ func (s *Server) toolDetail(c *gin.Context) {
 	c.JSON(200, tool)
 }
 func (s *Server) executeTool(c *gin.Context) {
-	var req struct {
-		Actor      string         `json:"actor"`
-		Role       string         `json:"role"`
-		Target     string         `json:"target"`
-		Approved   bool           `json:"approved"`
-		Parameters map[string]any `json:"parameters"`
-	}
+	var req executeHTTP
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": "invalid JSON body"})
 		return
