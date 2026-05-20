@@ -26,8 +26,17 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 	s := &Server{cfg: cfg, registry: registry, auditor: auditor, logger: logger}
 	r.GET("/healthz", s.health)
 	
-	// Swagger UI
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.NewHandler(), ginSwagger.URL("/swagger/swagger.json")))
+	// Swagger UI - redirect /swagger/ to /swagger/index.html
+	r.GET("/swagger", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/swagger/")
+	})
+	r.GET("/swagger/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+	})
+	r.GET("/swagger/index.html", func(c *gin.Context) {
+		c.FileFromFS("/root/ops-mcp/backend/swagger/index.html", &swaggerFiles.EmbeddedFS{})
+	})
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.NewHandler()))
 	
 	v1 := r.Group("/api/v1")
 	v1.GET("/dashboard/summary", s.dashboardSummary)
