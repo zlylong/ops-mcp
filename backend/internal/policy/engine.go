@@ -10,9 +10,6 @@ func (e *Engine) Evaluate(req domain.PolicyRequest) domain.PolicyDecision {
 	if req.Tool.Risk == domain.RiskCritical {
 		return domain.PolicyDecision{Allowed: false, Reason: "critical tools are denied by default"}
 	}
-	if !req.Tool.ReadOnly && req.Environment == domain.EnvProduction && !req.Approved {
-		return domain.PolicyDecision{Allowed: false, RequiresApproval: true, Reason: "production write operations require approval"}
-	}
 	switch req.Role {
 	case domain.RoleViewer:
 		if req.Tool.ReadOnly {
@@ -25,6 +22,12 @@ func (e *Engine) Evaluate(req domain.PolicyRequest) domain.PolicyDecision {
 		}
 		if req.Tool.Risk == domain.RiskMedium && (req.Environment == domain.EnvDevelopment || req.Environment == domain.EnvStaging) {
 			return domain.PolicyDecision{Allowed: true, Reason: "operator may execute medium-risk tools in dev/staging"}
+		}
+		if req.Tool.Risk == domain.RiskMedium && req.Environment == domain.EnvProduction && req.Approved {
+			return domain.PolicyDecision{Allowed: true, Reason: "operator may execute medium-risk tools in production when approved"}
+		}
+		if req.Environment == domain.EnvProduction {
+			return domain.PolicyDecision{Allowed: false, Reason: "production write operations require approval", RequiresApproval: true}
 		}
 		return domain.PolicyDecision{Allowed: false, Reason: "operator is not allowed for this environment or risk"}
 	case domain.RoleAdmin:

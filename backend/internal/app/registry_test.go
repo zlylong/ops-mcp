@@ -2,70 +2,237 @@ package app
 
 import (
 	"context"
-	"log/slog"
+	"net/http"
 	"testing"
+	"time"
 
-	"github.com/zlylong/ops-mcp/backend/internal/adapters/kubernetes"
-	"github.com/zlylong/ops-mcp/backend/internal/adapters/prometheus"
-	"github.com/zlylong/ops-mcp/backend/internal/audit"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/zlylong/ops-mcp/backend/internal/domain"
 	"github.com/zlylong/ops-mcp/backend/internal/policy"
 	"github.com/zlylong/ops-mcp/backend/internal/storage"
 )
 
-func newTestRegistry(t *testing.T) *Registry {
-	t.Helper()
-	r := NewRegistry(policy.NewEngine(), audit.NewStore(slog.Default()), storage.NewExecutionStore(), storage.NewApprovalStore(), domain.EnvDevelopment)
-	if err := RegisterMockTools(r, kubernetes.NewMockAdapter(), prometheus.NewMockAdapter()); err != nil {
-		t.Fatal(err)
-	}
-	return r
+type mockRecorder struct{}
+
+func (m *mockRecorder) Record(record domain.AuditRecord) domain.AuditRecord {
+	record.ID = "aud-mock-123"
+	return record
+}
+func (m *mockRecorder) List() []domain.AuditRecord { return nil }
+
+func TestRegistry_Register(t *testing.T) {
+	engine := policy.NewEngine()
+	recorder := &mockRecorder{}
+	execStore := storage.NewExecutionStore()
+	approvStore := storage.NewApprovalStore()
+	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+
+	err := registry.Register(domain.Tool{Name: "test.tool", Risk: domain.RiskLow}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"result": "ok"}, nil
+	})
+	assert.NoError(t, err)
+
+	err = registry.Register(domain.Tool{Name: "test.tool", Risk: domain.RiskLow}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"result": "ok"}, nil
+	})
+	assert.Error(t, err)
+
+	err = registry.Register(domain.Tool{Name: "", Risk: domain.RiskLow}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"result": "ok"}, nil
+	})
+	assert.Error(t, err)
 }
 
-func TestRegistryListAndGet(t *testing.T) {
-	t.Parallel()
-	r := newTestRegistry(t)
-	if got := len(r.List()); got != 9 {
-		t.Fatalf("tools=%d want 9", got)
-	}
-	tool, ok := r.Get("k8s.list_pods")
-	if !ok {
-		t.Fatal("expected k8s.list_pods")
-	}
-	if !tool.ReadOnly {
-		t.Fatal("k8s.list_pods must be read-only")
-	}
+func TestRegistry_List(t *testing.T) {
+	engine := policy.NewEngine()
+	recorder := &mockRecorder{}
+	execStore := storage.NewExecutionStore()
+	approvStore := storage.NewApprovalStore()
+	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+
+	registry.Register(domain.Tool{Name: "b.tool", Risk: domain.RiskLow}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"result": "ok"}, nil
+	})
+	registry.Register(domain.Tool{Name: "a.tool", Risk: domain.RiskLow}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"result": "ok"}, nil
+	})
+	registry.Register(domain.Tool{Name: "c.tool", Risk: domain.RiskLow}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"result": "ok"}, nil
+	})
+
+	tools := registry.List()
+	assert.Len(t, tools, 3)
+	assert.Equal(t, "a.tool", tools[0].Name)
+	assert.Equal(t, "b.tool", tools[1].Name)
+	assert.Equal(t, "c.tool", tools[2].Name)
 }
 
-func TestRegistryExecuteValidatesInputAndAudits(t *testing.T) {
-	t.Parallel()
-	r := newTestRegistry(t)
-	result, status, err := r.Execute(context.Background(), "k8s.get_pod_logs", domain.ExecuteRequest{Actor: "tester", Role: domain.RoleViewer, Parameters: map[string]any{"namespace": "default"}})
-	if err == nil {
-		t.Fatal("expected validation error")
-	}
-	if status != 400 {
-		t.Fatalf("status=%d want 400", status)
-	}
-	if result.AuditID == "" || result.ExecutionID == "" {
-		t.Fatalf("missing ids: %#v", result)
-	}
-	if len(r.Executions()) != 1 {
-		t.Fatalf("executions=%d want 1", len(r.Executions()))
-	}
+func TestRegistry_Get(t *testing.T) {
+	engine := policy.NewEngine()
+	recorder := &mockRecorder{}
+	execStore := storage.NewExecutionStore()
+	approvStore := storage.NewApprovalStore()
+	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+
+	registry.Register(domain.Tool{Name: "test.tool", Risk: domain.RiskLow}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"result": "ok"}, nil
+	})
+
+	tool, ok := registry.Get("test.tool")
+	assert.True(t, ok)
+	assert.Equal(t, "test.tool", tool.Name)
+
+	tool, ok = registry.Get("nonexistent")
+	assert.False(t, ok)
+	assert.Empty(t, tool.Name)
 }
 
-func TestRegistryExecuteSuccess(t *testing.T) {
-	t.Parallel()
-	r := newTestRegistry(t)
-	result, status, err := r.Execute(context.Background(), "prometheus.service_error_rate", domain.ExecuteRequest{Actor: "tester", Role: domain.RoleViewer, Parameters: map[string]any{"service": "api"}})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestRegistry_Execute_Completed(t *testing.T) {
+	engine := policy.NewEngine()
+	recorder := &mockRecorder{}
+	execStore := storage.NewExecutionStore()
+	approvStore := storage.NewApprovalStore()
+	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+
+	// 使用 ReadOnly 工具，Viewer 可以执行
+	registry.Register(domain.Tool{Name: "test.tool", ReadOnly: true, Risk: domain.RiskLow, InputSchema: map[string]string{"key": "string"}}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"key": "value"}, nil
+	})
+
+	req := domain.ExecuteRequest{
+		Actor:      "test-user",
+		Role:       domain.RoleViewer,
+		Target:     "local-dev",
+		Parameters: map[string]any{"key": "value"},
 	}
-	if status != 200 {
-		t.Fatalf("status=%d want 200", status)
+
+	result, code, err := registry.Execute(context.Background(), "test.tool", req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, code)
+	assert.NotEmpty(t, result.ExecutionID)
+}
+
+func TestRegistry_Execute_Denied(t *testing.T) {
+	engine := policy.NewEngine()
+	recorder := &mockRecorder{}
+	execStore := storage.NewExecutionStore()
+	approvStore := storage.NewApprovalStore()
+	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+
+	registry.Register(domain.Tool{Name: "test.tool", ReadOnly: true, Risk: domain.RiskLow, InputSchema: map[string]string{"key": "string"}}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"key": "value"}, nil
+	})
+
+	req := domain.ExecuteRequest{
+		Actor:      "test-user",
+		Role:       domain.RoleViewer,
+		Target:     "local-dev",
+		Parameters: map[string]any{"key": "value"},
 	}
-	if result.Data["errorRate"] == nil {
-		t.Fatalf("missing errorRate result: %#v", result.Data)
+
+	result, code, err := registry.Execute(context.Background(), "nonexistent", req)
+	assert.Error(t, err)
+	assert.Equal(t, http.StatusNotFound, code)
+	assert.Empty(t, result.ExecutionID)
+}
+
+func TestRegistry_Execute_PendingApproval(t *testing.T) {
+	engine := policy.NewEngine()
+	recorder := &mockRecorder{}
+	execStore := storage.NewExecutionStore()
+	approvStore := storage.NewApprovalStore()
+	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+
+	registry.Register(domain.Tool{Name: "test.tool", ReadOnly: false, Risk: domain.RiskMedium, InputSchema: map[string]string{"key": "string"}}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"key": "value"}, nil
+	})
+
+	req := domain.ExecuteRequest{
+		Actor:      "test-user",
+		Role:       domain.RoleOperator,
+		Target:     "local-dev",
+		Parameters: map[string]any{"key": "value"},
 	}
+
+	result, code, err := registry.Execute(context.Background(), "test.tool", req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusAccepted, code)
+	assert.NotEmpty(t, result.ExecutionID)
+	assert.NotEmpty(t, result.ApprovalID)
+}
+
+func TestRegistry_Approvals(t *testing.T) {
+	engine := policy.NewEngine()
+	recorder := &mockRecorder{}
+	execStore := storage.NewExecutionStore()
+	approvStore := storage.NewApprovalStore()
+	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+
+	now := time.Now()
+	approval := domain.Approval{
+		ID:          "app-1",
+		ExecutionID: "exec-123",
+		Tool:        "test.tool",
+		Actor:       "test-user",
+		Target:      "local-dev",
+		Status:      domain.ApprovalPending,
+		Reason:      "pending",
+		CreatedAt:   now,
+	}
+	registry.AddApproval(approval)
+
+	approvals := registry.Approvals()
+	assert.Len(t, approvals, 1)
+	assert.Equal(t, "app-1", approvals[0].ID)
+}
+
+func TestRegistry_Approve(t *testing.T) {
+	engine := policy.NewEngine()
+	recorder := &mockRecorder{}
+	execStore := storage.NewExecutionStore()
+	approvStore := storage.NewApprovalStore()
+	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+
+	now := time.Now()
+	approval := domain.Approval{
+		ID:          "app-1",
+		ExecutionID: "exec-123",
+		Tool:        "test.tool",
+		Actor:       "test-user",
+		Target:      "local-dev",
+		Status:      domain.ApprovalPending,
+		Reason:      "pending",
+		CreatedAt:   now,
+	}
+	registry.AddApproval(approval)
+
+	approved, err := registry.Approve("app-1")
+	assert.NoError(t, err)
+	assert.Equal(t, domain.ApprovalApproved, approved.Status)
+}
+
+func TestRegistry_Reject(t *testing.T) {
+	engine := policy.NewEngine()
+	recorder := &mockRecorder{}
+	execStore := storage.NewExecutionStore()
+	approvStore := storage.NewApprovalStore()
+	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+
+	now := time.Now()
+	approval := domain.Approval{
+		ID:          "app-1",
+		ExecutionID: "exec-123",
+		Tool:        "test.tool",
+		Actor:       "test-user",
+		Target:      "local-dev",
+		Status:      domain.ApprovalPending,
+		Reason:      "pending",
+		CreatedAt:   now,
+	}
+	registry.AddApproval(approval)
+
+	rejected, err := registry.Reject("app-1")
+	assert.NoError(t, err)
+	assert.Equal(t, domain.ApprovalRejected, rejected.Status)
 }

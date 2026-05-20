@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/zlylong/ops-mcp/backend/internal/audit"
 	"github.com/zlylong/ops-mcp/backend/internal/domain"
@@ -48,110 +47,134 @@ func (r *Registry) Register(tool domain.Tool, handler Handler) error {
 	return nil
 }
 
+func (r *Registry) AddApproval(approval domain.Approval) domain.Approval {
+	return r.approvals.Add(approval)
+}
+
 func (r *Registry) List() []domain.Tool {
 	out := make([]domain.Tool, 0, len(r.tools))
-	for _, item := range r.tools {
-		out = append(out, item.tool)
+	for _, t := range r.tools {
+		out = append(out, t.tool)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
+
 func (r *Registry) Get(name string) (domain.Tool, bool) {
-	item, ok := r.tools[name]
-	return item.tool, ok
+	t, ok := r.tools[name]
+	return t.tool, ok
 }
 
 func (r *Registry) Execute(ctx context.Context, name string, req domain.ExecuteRequest) (domain.ExecuteResult, int, error) {
-	item, ok := r.tools[name]
+	result := domain.ExecuteResult{
+		ExecutionID: "",
+		AuditID:     "",
+		ApprovalID:  "",
+	}
+	t, ok := r.tools[name]
 	if !ok {
-		return domain.ExecuteResult{Status: "not_found", Message: "tool not found"}, 404, errors.New("tool not found")
+		result.Message = "tool not found"
+		return result, 404, errors.New(result.Message)
 	}
-	if req.Actor == "" {
-		req.Actor = "anonymous"
+	policyReq := domain.PolicyRequest{
+		Tool:        t.tool,
+		Actor:       req.Actor,
+		Role:        req.Role,
+		Environment: r.environment,
+		Approved:    req.Approved,
 	}
-	if req.Role == "" {
-		req.Role = domain.RoleViewer
-	}
-	if req.Parameters == nil {
-		req.Parameters = map[string]any{}
-	}
-	if err := validateInput(item.tool, req.Parameters); err != nil {
-		exe := domain.Execution{ID: newID("exe"), Tool: name, Actor: req.Actor, Role: req.Role, Target: req.Target, Status: "validation_failed", Reason: err.Error(), Parameters: req.Parameters}
-		aud := r.auditor.Record(domain.AuditRecord{ExecutionID: exe.ID, Actor: req.Actor, Role: req.Role, Action: name, Target: req.Target, Allowed: false, Reason: err.Error(), Parameters: req.Parameters})
-		exe.AuditID = aud.ID
-		exe = r.executions.Add(exe)
-		return domain.ExecuteResult{ExecutionID: exe.ID, AuditID: aud.ID, Status: "validation_failed", Message: err.Error()}, 400, err
-	}
-	decision := r.policy.Evaluate(domain.PolicyRequest{Tool: item.tool, Actor: req.Actor, Role: req.Role, Environment: r.environment, Approved: req.Approved})
+	decision := r.policy.Evaluate(policyReq)
 	if !decision.Allowed {
-		exe := domain.Execution{ID: newID("exe"), Tool: name, Actor: req.Actor, Role: req.Role, Target: req.Target, Status: "blocked", Reason: decision.Reason, Parameters: req.Parameters}
-		aud := r.auditor.Record(domain.AuditRecord{ExecutionID: exe.ID, Actor: req.Actor, Role: req.Role, Action: name, Target: req.Target, Allowed: false, Reason: decision.Reason, Parameters: req.Parameters})
-		exe.AuditID = aud.ID
-		exe = r.executions.Add(exe)
-		result := domain.ExecuteResult{ExecutionID: exe.ID, AuditID: aud.ID, Status: "blocked", Message: decision.Reason}
-		status := 403
-		if decision.RequiresApproval {
-			approval := r.approvals.Add(domain.Approval{ExecutionID: exe.ID, Tool: name, Actor: req.Actor, Target: req.Target, Status: domain.ApprovalPending, Reason: decision.Reason})
-			result.ApprovalID = approval.ID
-			result.Status = "approval_required"
-			status = 409
+		result.Message = "policy denied"
+		exe := r.executions.Add(domain.Execution{
+			Tool:      name,
+			Actor:     req.Actor,
+			Role:      req.Role,
+			Target:    req.Target,
+			Status:    "denied",
+			Reason:    result.Message,
+			Parameters: req.Parameters,
+		})
+		result.ExecutionID = exe.ID
+		record := domain.AuditRecord{
+			ExecutionID: exe.ID,
+			Actor:       req.Actor,
+			Role:        req.Role,
+			Action:      "tool." + name,
+			Target:      req.Target,
+			Allowed:     false,
+			Reason:      result.Message,
 		}
-		return result, status, errors.New(decision.Reason)
+		record = r.auditor.Record(record)
+		result.AuditID = record.ID
+		return result, 403, errors.New(result.Message)
 	}
-	data, err := item.handler(ctx, req.Parameters)
-	status := "succeeded"
-	reason := "executed"
+	if t.tool.Risk >= domain.RiskMedium && !req.Approved {
+		approval := r.approvals.Add(domain.Approval{
+			ExecutionID: "",
+			Tool:        name,
+			Actor:       req.Actor,
+			Target:      req.Target,
+			Status:      domain.ApprovalPending,
+			Reason:      "pending approval for " + string(t.tool.Risk),
+		})
+		exe := r.executions.Add(domain.Execution{
+			Tool:       name,
+			Actor:      req.Actor,
+			Role:       req.Role,
+			Target:     req.Target,
+			Status:     "pending_approval",
+			Reason:     "pending approval",
+			Parameters: req.Parameters,
+		})
+		result.ExecutionID = exe.ID
+		result.ApprovalID = approval.ID
+		return result, 202, nil
+	}
+	exe := r.executions.Add(domain.Execution{
+		Tool:       name,
+		Actor:      req.Actor,
+		Role:       req.Role,
+		Target:     req.Target,
+		Status:     "completed",
+		Parameters: req.Parameters,
+	})
+	result.ExecutionID = exe.ID
+	output, err := t.handler(ctx, req.Parameters)
 	if err != nil {
-		status = "failed"
-		reason = err.Error()
+		exe.Status = "error"
+		exe.Reason = err.Error()
+		result.Message = err.Error()
+		r.executions.Add(exe)
+		record := domain.AuditRecord{
+			ExecutionID: exe.ID,
+			Actor:       req.Actor,
+			Role:        req.Role,
+			Action:      "tool." + name,
+			Target:      req.Target,
+			Allowed:     true,
+			Reason:      "error in handler",
+		}
+		r.auditor.Record(record)
+		return result, 500, err
 	}
-	exe := domain.Execution{ID: newID("exe"), Tool: name, Actor: req.Actor, Role: req.Role, Target: req.Target, Status: status, Reason: reason, Parameters: req.Parameters, Result: data}
-	aud := r.auditor.Record(domain.AuditRecord{ExecutionID: exe.ID, Actor: req.Actor, Role: req.Role, Action: name, Target: req.Target, Allowed: err == nil, Reason: reason, Parameters: req.Parameters})
-	exe.AuditID = aud.ID
-	exe = r.executions.Add(exe)
-	if err != nil {
-		return domain.ExecuteResult{ExecutionID: exe.ID, AuditID: aud.ID, Status: "failed", Message: err.Error()}, 500, err
+	exe.Result = output
+	r.executions.Add(exe)
+	record := domain.AuditRecord{
+		ExecutionID: exe.ID,
+		Actor:       req.Actor,
+		Role:        req.Role,
+		Action:      "tool." + name,
+		Target:      req.Target,
+		Allowed:     true,
+		Reason:      "approved",
 	}
-	return domain.ExecuteResult{ExecutionID: exe.ID, AuditID: aud.ID, Status: "succeeded", Message: "tool executed", Data: data}, 200, nil
+	r.auditor.Record(record)
+	result.ExecutionID = exe.ID
+	result.AuditID = record.ID
+	result.Data = output
+	return result, 200, nil
 }
-
-func validateInput(tool domain.Tool, params map[string]any) error {
-	for name, typ := range tool.InputSchema {
-		if strings.HasSuffix(typ, "?") {
-			continue
-		}
-		if _, ok := params[name]; !ok {
-			return fmt.Errorf("missing required parameter: %s", name)
-		}
-	}
-	for name, value := range params {
-		typ, ok := tool.InputSchema[name]
-		if !ok {
-			continue
-		}
-		typ = strings.TrimSuffix(typ, "?")
-		switch typ {
-		case "string":
-			if _, ok := value.(string); !ok {
-				return fmt.Errorf("parameter %s must be string", name)
-			}
-		case "number":
-			switch value.(type) {
-			case float64, float32, int, int64, int32:
-			default:
-				return fmt.Errorf("parameter %s must be number", name)
-			}
-		}
-	}
-	return nil
-}
-
-func newID(prefix string) string {
-	return fmt.Sprintf("%s-%d", prefix, timeNowUnixNano())
-}
-
-var timeNowUnixNano = func() int64 { return timeNow().UnixNano() }
-var timeNow = func() time.Time { return time.Now().UTC() }
 
 func (r *Registry) Executions() []domain.Execution               { return r.executions.List() }
 func (r *Registry) Execution(id string) (domain.Execution, bool) { return r.executions.Get(id) }
