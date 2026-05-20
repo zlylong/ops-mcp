@@ -339,3 +339,34 @@ func TestToolCRUDRoutesValidation(t *testing.T) {
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
+
+func TestExecuteTool_RequiresApprovalFlagCreatesApproval(t *testing.T) {
+	cfg := config.Config{}
+	registry := createTestRegistry()
+	auditor := &mockRecorder{}
+	logger := slog.Default()
+	r := NewRouter(cfg, registry, auditor, logger)
+
+	createBody := map[string]any{"name": "approval.flag", "description": "Approval flag", "category": "custom", "readOnly": true, "risk": "low", "requiresApproval": true, "inputSchema": map[string]string{"message": "string"}}
+	body, _ := json.Marshal(createBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tools", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	executeBody := map[string]any{"actor": "viewer", "role": "viewer", "target": "local", "parameters": map[string]any{"message": "hello"}}
+	body, _ = json.Marshal(executeBody)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/approval.flag/execute", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusAccepted, w.Code)
+	assert.Contains(t, w.Body.String(), "pending_approval")
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/approvals", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "approval.flag")
+}

@@ -268,3 +268,39 @@ func TestRegistry_ToolCRUDValidation(t *testing.T) {
 	assert.Error(t, err)
 	assert.Error(t, registry.DeleteTool("missing.tool"))
 }
+
+func TestRegistry_Execute_RequiresApprovalFlag(t *testing.T) {
+	registry := NewRegistry(policy.NewEngine(), &mockRecorder{}, storage.NewExecutionStore(), storage.NewApprovalStore(), domain.EnvDevelopment)
+	err := registry.Register(domain.Tool{Name: "approval.flag", ReadOnly: true, Risk: domain.RiskLow, RequiresApproval: true}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"result": "ok"}, nil
+	})
+	assert.NoError(t, err)
+
+	result, code, err := registry.Execute(context.Background(), "approval.flag", domain.ExecuteRequest{Actor: "viewer", Role: domain.RoleViewer, Target: "local", Parameters: map[string]any{"message": "hello"}})
+
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusAccepted, code)
+	assert.Equal(t, "pending_approval", result.Status)
+	assert.Equal(t, "pending approval", result.Message)
+	assert.NotEmpty(t, result.ExecutionID)
+	assert.NotEmpty(t, result.ApprovalID)
+	approvals := registry.Approvals()
+	assert.Len(t, approvals, 1)
+	assert.Equal(t, result.ExecutionID, approvals[0].ExecutionID)
+	assert.Equal(t, "approval.flag", approvals[0].Tool)
+}
+
+func TestRegistry_Execute_HighRiskRequiresApproval(t *testing.T) {
+	registry := NewRegistry(policy.NewEngine(), &mockRecorder{}, storage.NewExecutionStore(), storage.NewApprovalStore(), domain.EnvDevelopment)
+	err := registry.Register(domain.Tool{Name: "approval.high", ReadOnly: true, Risk: domain.RiskHigh}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"result": "ok"}, nil
+	})
+	assert.NoError(t, err)
+
+	result, code, err := registry.Execute(context.Background(), "approval.high", domain.ExecuteRequest{Actor: "viewer", Role: domain.RoleViewer, Target: "local", Parameters: map[string]any{}})
+
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusAccepted, code)
+	assert.Equal(t, "pending_approval", result.Status)
+	assert.NotEmpty(t, result.ApprovalID)
+}

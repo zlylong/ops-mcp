@@ -103,6 +103,25 @@ func validateTool(tool domain.Tool) error {
 	}
 }
 
+func requiresExecutionApproval(tool domain.Tool) bool {
+	if tool.RequiresApproval {
+		return true
+	}
+	switch tool.Risk {
+	case domain.RiskMedium, domain.RiskHigh, domain.RiskCritical:
+		return true
+	default:
+		return false
+	}
+}
+
+func approvalReason(tool domain.Tool) string {
+	if tool.RequiresApproval {
+		return "pending approval by tool configuration"
+	}
+	return "pending approval for " + string(tool.Risk)
+}
+
 func customToolHandler(name string) Handler {
 	return func(ctx context.Context, params map[string]any) (map[string]any, error) {
 		return map[string]any{"tool": name, "parameters": params, "message": "custom tool executed"}, nil
@@ -171,15 +190,7 @@ func (r *Registry) Execute(ctx context.Context, name string, req domain.ExecuteR
 		result.AuditID = record.ID
 		return result, 403, errors.New(result.Message)
 	}
-	if t.tool.Risk >= domain.RiskMedium && !req.Approved {
-		approval := r.approvals.Add(domain.Approval{
-			ExecutionID: "",
-			Tool:        name,
-			Actor:       req.Actor,
-			Target:      req.Target,
-			Status:      domain.ApprovalPending,
-			Reason:      "pending approval for " + string(t.tool.Risk),
-		})
+	if requiresExecutionApproval(t.tool) && !req.Approved {
 		exe := r.executions.Add(domain.Execution{
 			Tool:       name,
 			Actor:      req.Actor,
@@ -189,8 +200,18 @@ func (r *Registry) Execute(ctx context.Context, name string, req domain.ExecuteR
 			Reason:     "pending approval",
 			Parameters: req.Parameters,
 		})
+		approval := r.approvals.Add(domain.Approval{
+			ExecutionID: exe.ID,
+			Tool:        name,
+			Actor:       req.Actor,
+			Target:      req.Target,
+			Status:      domain.ApprovalPending,
+			Reason:      approvalReason(t.tool),
+		})
 		result.ExecutionID = exe.ID
 		result.ApprovalID = approval.ID
+		result.Status = "pending_approval"
+		result.Message = "pending approval"
 		return result, 202, nil
 	}
 	exe := r.executions.Add(domain.Execution{
@@ -202,6 +223,8 @@ func (r *Registry) Execute(ctx context.Context, name string, req domain.ExecuteR
 		Parameters: req.Parameters,
 	})
 	result.ExecutionID = exe.ID
+	result.Status = "completed"
+	result.Message = "completed"
 	output, err := t.handler(ctx, req.Parameters)
 	if err != nil {
 		exe.Status = "error"
