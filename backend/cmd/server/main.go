@@ -23,11 +23,7 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	cfg, err := config.Load()
-	if err != nil {
-		logger.Error("load config", "error", err)
-		os.Exit(1)
-	}
+	cfg := config.Load()
 	if cfg.DatabaseURL != "" && cfg.Mode != "mock" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

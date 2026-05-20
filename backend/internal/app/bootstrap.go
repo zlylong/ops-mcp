@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"time"
 
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/adapters/kubernetes"
@@ -42,10 +43,19 @@ func RegisterMockTools(r *Registry, k8s *kubernetes.MockAdapter, prom *prometheu
 	return nil
 }
 
+// seedID is the fixed ID used for seeded executions and audit records.
+// Using a fixed ID makes SeedMockData idempotent: re-calling it will
+// find the existing records and skip insertion rather than duplicating.
+const seedIDPrefix = "seed-"
+
 func (r *Registry) SeedMockData() {
-	if len(r.Executions()) > 0 {
-		return
+	// Idempotency: skip if any seeded execution already exists.
+	for _, exe := range r.executions.List() {
+		if strings.HasPrefix(exe.ID, seedIDPrefix) {
+			return
+		}
 	}
+
 	now := time.Now().UTC()
 	seeded := []domain.Execution{
 		{

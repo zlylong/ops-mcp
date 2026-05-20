@@ -24,7 +24,10 @@ func NewConfig() Config {
 	}
 }
 
-func Load() (Config, error) {
+// Load reads configuration from environment variables.
+// It prefers the new DARWIN_OPS_MCP_* prefix, then falls back to
+// the legacy OPS_MCP_* and MCP_* prefixes for compatibility.
+func Load() Config {
 	cfg := NewConfig()
 
 	if env := firstEnv("DARWIN_OPS_MCP_ENV", "OPS_MCP_ENV", "MCP_ENVIRONMENT"); env != "" {
@@ -43,7 +46,7 @@ func Load() (Config, error) {
 		cfg.SeedMockData = seed == "true" || seed == "1"
 	}
 
-	return cfg, nil
+	return cfg
 }
 
 func firstEnv(keys ...string) string {

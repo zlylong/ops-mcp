@@ -3,7 +3,9 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -15,6 +17,10 @@ import (
 	_ "github.com/zlylong/darwin-ops-mcp/docs"
 )
 
+// TraceIDHeader is the HTTP header used to propagate trace IDs.
+// Clients may pass an existing trace ID; if absent, one is generated.
+const TraceIDHeader = "X-Trace-ID"
+
 type Server struct {
 	cfg      config.Config
 	registry *app.Registry
@@ -25,7 +31,7 @@ type Server struct {
 func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder, logger *slog.Logger) http.Handler {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.Use(gin.Recovery(), cors())
+	r.Use(gin.Recovery(), requestLogger(logger), cors())
 	s := &Server{cfg: cfg, registry: registry, auditor: auditor, logger: logger}
 	r.GET("/healthz", s.health)
 
@@ -58,13 +64,52 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 	return r
 }
 
+// requestLogger is a middleware that logs HTTP requests with structured fields
+// for method, path, status, duration, client IP, and trace ID.
+// It also propagates or generates a trace ID for the request lifetime.
+func requestLogger(logger *slog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+		query := c.Request.URL.RawQuery
+		if query != "" {
+			path = path + "?" + query
+		}
+		traceID := c.GetHeader(TraceIDHeader)
+		if traceID == "" {
+			traceID = generateTraceID()
+		}
+		c.Set(TraceIDHeader, traceID)
+		c.Header(TraceIDHeader, traceID)
+
+		c.Next()
+
+		latency := time.Since(start)
+		status := c.Writer.Status()
+		logger.Info("http request",
+			"method", c.Request.Method,
+			"path", path,
+			"status", status,
+			"latency_ms", latency.Milliseconds(),
+			"client_ip", c.ClientIP(),
+			"trace_id", traceID,
+		)
+	}
+}
+
+// generateTraceID creates a short random trace ID.
+// In production this should be a full UUID; short format suffices for mock mode.
+func generateTraceID() string {
+	return "tr-" + strconv.FormatInt(time.Now().UTC().UnixNano(), 36)
+}
+
 func (s *Server) health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "mode": s.cfg.Mode, "environment": s.cfg.Environment, "tools": len(s.registry.List()), "executions": len(s.registry.Executions()), "auditRecords": len(s.auditor.List()), "approvals": len(s.registry.Approvals())})
 }
 func (s *Server) dashboardSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"mode": s.cfg.Mode, "environment": s.cfg.Environment, "tools": len(s.registry.List()), "executions": len(s.registry.Executions()), "auditRecords": len(s.auditor.List()), "approvals": len(s.registry.Approvals())})
 }
-func (s *Server) tools(c *gin.Context) { c.JSON(http.StatusOK, s.registry.List()) }
+func (s *Server) tools(c *gin.Context)    { c.JSON(http.StatusOK, s.registry.List()) }
 func (s *Server) createTool(c *gin.Context) {
 	var tool domain.Tool
 	if err := c.ShouldBindJSON(&tool); err != nil {
@@ -127,7 +172,7 @@ func (s *Server) executeTool(c *gin.Context) {
 	}
 	c.JSON(status, result)
 }
-func (s *Server) executions(c *gin.Context) { c.JSON(200, s.registry.Executions()) }
+func (s *Server) executions(c *gin.Context)   { c.JSON(200, s.registry.Executions()) }
 func (s *Server) executionDetail(c *gin.Context) {
 	exe, ok := s.registry.Execution(c.Param("id"))
 	if !ok {
