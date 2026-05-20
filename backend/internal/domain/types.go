@@ -71,6 +71,7 @@ type PolicyDecision struct {
 type AuditRecord struct {
 	ID          string         `json:"id"`
 	ExecutionID string         `json:"executionId,omitempty"`
+	TraceID     string         `json:"traceId,omitempty"`
 	At          time.Time      `json:"at"`
 	Actor       string         `json:"actor"`
 	Role        Role           `json:"role"`
