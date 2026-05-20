@@ -48,6 +48,19 @@ func toolsList(c *gin.Context) {
 	c.JSON(200, gin.H{"data": []interface{}{}})
 }
 
+// @Summary Create Tool
+// @Description Creates a custom tool definition in the runtime registry
+// @Tags tools
+// @Accept json
+// @Produce json
+// @Param request body object true "Tool definition"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /tools [post]
+func createTool(c *gin.Context) {
+	c.JSON(201, gin.H{"data": gin.H{}})
+}
+
 // @Summary Get Tool Details
 // @Description Returns detailed information about a specific tool
 // @Tags tools
@@ -58,6 +71,33 @@ func toolsList(c *gin.Context) {
 // @Router /tools/{name} [get]
 func toolDetail(c *gin.Context) {
 	c.JSON(200, gin.H{"data": gin.H{}})
+}
+
+// @Summary Update Tool
+// @Description Updates an existing tool definition
+// @Tags tools
+// @Param name path string true "Tool name"
+// @Accept json
+// @Produce json
+// @Param request body object true "Tool definition"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /tools/{name} [put]
+func updateTool(c *gin.Context) {
+	c.JSON(200, gin.H{"data": gin.H{}})
+}
+
+// @Summary Delete Tool
+// @Description Deletes an existing tool definition from the runtime registry
+// @Tags tools
+// @Param name path string true "Tool name"
+// @Produce json
+// @Success 204 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /tools/{name} [delete]
+func deleteTool(c *gin.Context) {
+	c.Status(204)
 }
 
 // @Summary Execute Tool

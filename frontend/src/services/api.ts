@@ -1,4 +1,4 @@
-import type { AuditEvent, Approval, Execution, ExecuteResult, ExecuteRequest, Tool, Summary } from '../types';
+import type { AuditEvent, Approval, Execution, ExecuteResult, ExecuteRequest, Tool, ToolRequest, Summary } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? '';
 const MOCK_API = import.meta.env.VITE_MOCK_API === 'true';
@@ -30,7 +30,14 @@ const mockTools: Tool[] = [
 async function mockRequest<T>(path: string, init?: RequestInit): Promise<T> {
   await new Promise((resolve) => setTimeout(resolve, 180));
   if (path === '/api/v1/dashboard/summary') return { mode: 'mock', environment: 'development', tools: mockTools.length, executions: mockExecutions.length, auditRecords: mockAudit.length, approvals: mockApprovals.length } as T;
-  if (path === '/api/v1/tools') return mockTools as T;
+  if (path === '/api/v1/tools' && (!init?.method || init.method === 'GET')) return mockTools as T;
+  if (path === '/api/v1/tools' && init?.method === 'POST') {
+    const tool = JSON.parse(String(init.body ?? '{}')) as Tool;
+    if (!tool.name) throw new ApiError(400, { error: 'tool name is required' });
+    if (mockTools.some((item) => item.name === tool.name)) throw new ApiError(400, { error: 'tool already registered' });
+    mockTools.unshift(tool);
+    return tool as T;
+  }
   if (path.startsWith('/api/v1/tools/') && path.endsWith('/execute')) {
     const name = decodeURIComponent(path.replace('/api/v1/tools/', '').replace('/execute', ''));
     const req = JSON.parse(String(init?.body ?? '{}')) as ExecuteRequest;
@@ -51,8 +58,18 @@ async function mockRequest<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (path.startsWith('/api/v1/tools/')) {
     const name = decodeURIComponent(path.replace('/api/v1/tools/', ''));
-    const tool = mockTools.find((item) => item.name === name);
+    const index = mockTools.findIndex((item) => item.name === name);
+    const tool = mockTools[index];
     if (!tool) throw new ApiError(404, { error: 'tool not found' });
+    if (init?.method === 'PUT') {
+      const next = JSON.parse(String(init.body ?? '{}')) as Tool;
+      mockTools[index] = next;
+      return next as T;
+    }
+    if (init?.method === 'DELETE') {
+      mockTools.splice(index, 1);
+      return null as T;
+    }
     return tool as T;
   }
   if (path === '/api/v1/executions') return mockExecutions as T;
@@ -86,6 +103,9 @@ export const api = {
   summary: () => requestJSON<Summary>('/api/v1/dashboard/summary'),
   tools: () => requestJSON<Tool[]>('/api/v1/tools'),
   tool: (name: string) => requestJSON<Tool>(`/api/v1/tools/${encodeURIComponent(name)}`),
+  createTool: (req: ToolRequest) => requestJSON<Tool>('/api/v1/tools', { method: 'POST', body: JSON.stringify(req) }),
+  updateTool: (name: string, req: ToolRequest) => requestJSON<Tool>(`/api/v1/tools/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(req) }),
+  deleteTool: (name: string) => requestJSON<void>(`/api/v1/tools/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   execute: (name: string, req: ExecuteRequest) => requestJSON<ExecuteResult>(`/api/v1/tools/${encodeURIComponent(name)}/execute`, { method: 'POST', body: JSON.stringify(req) }),
   executions: () => requestJSON<Execution[]>('/api/v1/executions'),
   execution: (id: string) => requestJSON<Execution>(`/api/v1/executions/${encodeURIComponent(id)}`),

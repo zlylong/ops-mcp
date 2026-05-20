@@ -3,6 +3,7 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -10,6 +11,7 @@ import (
 	"github.com/zlylong/ops-mcp/backend/internal/app"
 	"github.com/zlylong/ops-mcp/backend/internal/audit"
 	"github.com/zlylong/ops-mcp/backend/internal/config"
+	"github.com/zlylong/ops-mcp/backend/internal/domain"
 	_ "github.com/zlylong/ops-mcp/docs"
 )
 
@@ -42,7 +44,10 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 	v1 := r.Group("/api/v1")
 	v1.GET("/dashboard/summary", s.dashboardSummary)
 	v1.GET("/tools", s.tools)
+	v1.POST("/tools", s.createTool)
 	v1.GET("/tools/:name", s.toolDetail)
+	v1.PUT("/tools/:name", s.updateTool)
+	v1.DELETE("/tools/:name", s.deleteTool)
 	v1.POST("/tools/:name/execute", s.executeTool)
 	v1.GET("/executions", s.executions)
 	v1.GET("/executions/:id", s.executionDetail)
@@ -60,6 +65,19 @@ func (s *Server) dashboardSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"mode": s.cfg.Mode, "environment": s.cfg.Environment, "tools": len(s.registry.List()), "executions": len(s.registry.Executions()), "auditRecords": len(s.auditor.List()), "approvals": len(s.registry.Approvals())})
 }
 func (s *Server) tools(c *gin.Context) { c.JSON(http.StatusOK, s.registry.List()) }
+func (s *Server) createTool(c *gin.Context) {
+	var tool domain.Tool
+	if err := c.ShouldBindJSON(&tool); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+		return
+	}
+	created, err := s.registry.CreateTool(tool)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, created)
+}
 func (s *Server) toolDetail(c *gin.Context) {
 	tool, ok := s.registry.Get(c.Param("name"))
 	if !ok {
@@ -67,6 +85,34 @@ func (s *Server) toolDetail(c *gin.Context) {
 		return
 	}
 	c.JSON(200, tool)
+}
+func (s *Server) updateTool(c *gin.Context) {
+	var tool domain.Tool
+	if err := c.ShouldBindJSON(&tool); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+		return
+	}
+	updated, err := s.registry.UpdateTool(c.Param("name"), tool)
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
+}
+func (s *Server) deleteTool(c *gin.Context) {
+	if err := s.registry.DeleteTool(c.Param("name")); err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 func (s *Server) executeTool(c *gin.Context) {
 	var req executeHTTP
@@ -112,7 +158,7 @@ func (s *Server) reject(c *gin.Context) {
 func cors() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization")
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)

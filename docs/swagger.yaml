@@ -167,7 +167,58 @@ paths:
       summary: List All Tools
       tags:
       - tools
+    post:
+      consumes:
+      - application/json
+      description: Creates a custom tool definition in the runtime registry
+      parameters:
+      - description: Tool definition
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create Tool
+      tags:
+      - tools
   /tools/{name}:
+    delete:
+      description: Deletes an existing tool definition from the runtime registry
+      parameters:
+      - description: Tool name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete Tool
+      tags:
+      - tools
     get:
       description: Returns detailed information about a specific tool
       parameters:
@@ -190,6 +241,43 @@ paths:
             additionalProperties: true
             type: object
       summary: Get Tool Details
+      tags:
+      - tools
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing tool definition
+      parameters:
+      - description: Tool name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Tool definition
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update Tool
       tags:
       - tools
   /tools/{name}/execute:

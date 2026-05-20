@@ -236,3 +236,35 @@ func TestRegistry_Reject(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, domain.ApprovalRejected, rejected.Status)
 }
+
+func TestRegistry_ToolCRUD(t *testing.T) {
+	registry := NewRegistry(policy.NewEngine(), &mockRecorder{}, storage.NewExecutionStore(), storage.NewApprovalStore(), domain.EnvDevelopment)
+	created, err := registry.CreateTool(domain.Tool{Name: "custom.echo", Description: "Echo params", Category: "custom", ReadOnly: true, Risk: domain.RiskLow, InputSchema: map[string]string{"message": "string"}})
+	assert.NoError(t, err)
+	assert.Equal(t, "custom.echo", created.Name)
+
+	updated, err := registry.UpdateTool("custom.echo", domain.Tool{Name: "custom.echo", Description: "Updated", Category: "custom", ReadOnly: true, Risk: domain.RiskMedium, InputSchema: map[string]string{"message": "string", "count": "number?"}})
+	assert.NoError(t, err)
+	assert.Equal(t, domain.RiskMedium, updated.Risk)
+	assert.Equal(t, "Updated", updated.Description)
+
+	result, code, err := registry.Execute(context.Background(), "custom.echo", domain.ExecuteRequest{Actor: "admin", Role: domain.RoleAdmin, Target: "local", Approved: true, Parameters: map[string]any{"message": "hello"}})
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "custom.echo", result.Data["tool"])
+
+	assert.NoError(t, registry.DeleteTool("custom.echo"))
+	_, ok := registry.Get("custom.echo")
+	assert.False(t, ok)
+}
+
+func TestRegistry_ToolCRUDValidation(t *testing.T) {
+	registry := NewRegistry(policy.NewEngine(), &mockRecorder{}, storage.NewExecutionStore(), storage.NewApprovalStore(), domain.EnvDevelopment)
+	_, err := registry.CreateTool(domain.Tool{Name: "bad/tool", Risk: domain.RiskLow})
+	assert.Error(t, err)
+	_, err = registry.CreateTool(domain.Tool{Name: "bad.risk", Risk: domain.RiskLevel("extreme")})
+	assert.Error(t, err)
+	_, err = registry.UpdateTool("missing.tool", domain.Tool{Name: "missing.tool", Risk: domain.RiskLow})
+	assert.Error(t, err)
+	assert.Error(t, registry.DeleteTool("missing.tool"))
+}

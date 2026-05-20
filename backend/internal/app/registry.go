@@ -34,8 +34,8 @@ func NewRegistry(policyEngine *policy.Engine, auditor audit.Recorder, executions
 }
 
 func (r *Registry) Register(tool domain.Tool, handler Handler) error {
-	if strings.TrimSpace(tool.Name) == "" {
-		return errors.New("tool name is required")
+	if err := validateTool(tool); err != nil {
+		return err
 	}
 	if handler == nil {
 		return errors.New("tool handler is required")
@@ -45,6 +45,68 @@ func (r *Registry) Register(tool domain.Tool, handler Handler) error {
 	}
 	r.tools[tool.Name] = registeredTool{tool: tool, handler: handler}
 	return nil
+}
+
+func (r *Registry) CreateTool(tool domain.Tool) (domain.Tool, error) {
+	if err := r.Register(tool, customToolHandler(tool.Name)); err != nil {
+		return domain.Tool{}, err
+	}
+	return tool, nil
+}
+
+func (r *Registry) UpdateTool(name string, tool domain.Tool) (domain.Tool, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return domain.Tool{}, errors.New("tool name is required")
+	}
+	if strings.TrimSpace(tool.Name) == "" {
+		tool.Name = name
+	}
+	if tool.Name != name {
+		return domain.Tool{}, errors.New("tool name cannot be changed")
+	}
+	existing, exists := r.tools[name]
+	if !exists {
+		return domain.Tool{}, fmt.Errorf("tool not found: %s", name)
+	}
+	if err := validateTool(tool); err != nil {
+		return domain.Tool{}, err
+	}
+	r.tools[name] = registeredTool{tool: tool, handler: existing.handler}
+	return tool, nil
+}
+
+func (r *Registry) DeleteTool(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("tool name is required")
+	}
+	if _, exists := r.tools[name]; !exists {
+		return fmt.Errorf("tool not found: %s", name)
+	}
+	delete(r.tools, name)
+	return nil
+}
+
+func validateTool(tool domain.Tool) error {
+	if strings.TrimSpace(tool.Name) == "" {
+		return errors.New("tool name is required")
+	}
+	if strings.ContainsAny(tool.Name, " /\\") {
+		return errors.New("tool name cannot contain spaces or slashes")
+	}
+	switch tool.Risk {
+	case "", domain.RiskLow, domain.RiskMedium, domain.RiskHigh, domain.RiskCritical:
+		return nil
+	default:
+		return fmt.Errorf("invalid risk level: %s", tool.Risk)
+	}
+}
+
+func customToolHandler(name string) Handler {
+	return func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"tool": name, "parameters": params, "message": "custom tool executed"}, nil
+	}
 }
 
 func (r *Registry) AddApproval(approval domain.Approval) domain.Approval {
@@ -87,12 +149,12 @@ func (r *Registry) Execute(ctx context.Context, name string, req domain.ExecuteR
 	if !decision.Allowed {
 		result.Message = "policy denied"
 		exe := r.executions.Add(domain.Execution{
-			Tool:      name,
-			Actor:     req.Actor,
-			Role:      req.Role,
-			Target:    req.Target,
-			Status:    "denied",
-			Reason:    result.Message,
+			Tool:       name,
+			Actor:      req.Actor,
+			Role:       req.Role,
+			Target:     req.Target,
+			Status:     "denied",
+			Reason:     result.Message,
 			Parameters: req.Parameters,
 		})
 		result.ExecutionID = exe.ID

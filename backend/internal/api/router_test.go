@@ -276,3 +276,66 @@ func TestSwaggerUIRoutes(t *testing.T) {
 	assert.Equal(t, http.StatusOK, docResp.Code)
 	assert.Contains(t, docResp.Body.String(), "Ops MCP API")
 }
+
+func TestToolCRUDRoutes(t *testing.T) {
+	cfg := config.Config{}
+	registry := createTestRegistry()
+	auditor := &mockRecorder{}
+	logger := slog.Default()
+	r := NewRouter(cfg, registry, auditor, logger)
+
+	createBody := map[string]any{"name": "custom.echo", "description": "Echo params", "category": "custom", "readOnly": true, "risk": "low", "requiresApproval": false, "inputSchema": map[string]string{"message": "string"}}
+	body, _ := json.Marshal(createBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tools", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Contains(t, w.Body.String(), "custom.echo")
+
+	updateBody := map[string]any{"name": "custom.echo", "description": "Updated", "category": "custom", "readOnly": true, "risk": "medium", "requiresApproval": true, "inputSchema": map[string]string{"message": "string"}}
+	body, _ = json.Marshal(updateBody)
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/tools/custom.echo", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "Updated")
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/tools/custom.echo", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/tools/custom.echo", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestToolCRUDRoutesValidation(t *testing.T) {
+	cfg := config.Config{}
+	registry := createTestRegistry()
+	auditor := &mockRecorder{}
+	logger := slog.Default()
+	r := NewRouter(cfg, registry, auditor, logger)
+
+	body, _ := json.Marshal(map[string]any{"name": "bad/tool", "risk": "low"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tools", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	body, _ = json.Marshal(map[string]any{"name": "missing.tool", "risk": "low"})
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/tools/missing.tool", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/tools/missing.tool", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}

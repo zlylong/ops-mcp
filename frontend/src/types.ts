@@ -2,6 +2,7 @@ export type Risk = 'low' | 'medium' | 'high' | 'critical';
 export type Role = 'viewer' | 'operator' | 'admin';
 export type Summary = { mode: string; environment: string; tools: number; executions: number; auditRecords: number; approvals: number };
 export type Tool = { name: string; description: string; category: string; readOnly: boolean; risk: Risk; requiresApproval: boolean; inputSchema: Record<string, string> };
+export type ToolRequest = Tool;
 export type AuditEvent = { id: string; executionId?: string; traceId?: string; at: string; actor: string; role: Role; action: string; target: string; allowed: boolean; reason: string; parameters?: Record<string, unknown> };
 export type Execution = { id: string; tool: string; actor: string; role: Role; target: string; status: string; reason: string; parameters?: Record<string, unknown>; result?: Record<string, unknown>; auditId: string; createdAt: string };
 export type Approval = { id: string; executionId: string; tool: string; actor: string; target: string; status: 'pending' | 'approved' | 'rejected'; reason: string; createdAt: string; decidedAt?: string };
