@@ -100,3 +100,52 @@ body {
     padding-left: 48px;
   }
 }
+
+.user-menu {
+  position: fixed;
+  top: 16px;
+  right: 18px;
+  z-index: 1000;
+}
+
+.user-menu-trigger {
+  cursor: pointer;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #eef0f3;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.10);
+  backdrop-filter: blur(8px);
+}
+
+.app-version {
+  position: fixed;
+  left: 16px;
+  bottom: 12px;
+  z-index: 1000;
+  padding: 5px 10px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 768px) {
+  .user-menu {
+    top: 12px;
+    right: 12px;
+  }
+
+  .user-menu-trigger {
+    padding: 6px 9px;
+  }
+
+  .app-version {
+    left: 12px;
+    bottom: 10px;
+  }
+}
