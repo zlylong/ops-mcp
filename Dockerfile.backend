@@ -3,11 +3,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY backend ./backend
-RUN go install github.com/swaggo/swag/cmd/swag@latest
-WORKDIR /src/backend
-RUN swag init --generalInfo internal/api/api.go --output docs
-RUN mv docs swagger
-WORKDIR /src
+COPY docs ./docs
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.2
+RUN swag init --generalInfo backend/internal/api/api.go --output docs
 RUN CGO_ENABLED=0 go build -o /out/ops-mcp ./backend/cmd/server
 
 FROM debian:13-slim
@@ -15,7 +13,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/ops-mcp /usr/local/bin/ops-mcp
-COPY --from=build /src/backend/swagger /root/ops-mcp/backend/swagger
 ENV OPS_MCP_ADDR=:8080 OPS_MCP_MODE=mock OPS_MCP_SEED_MOCK=true
 EXPOSE 8080
 CMD ["ops-mcp"]

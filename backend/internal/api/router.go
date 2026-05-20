@@ -5,11 +5,12 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/swaggo/gin-swagger"
 	swaggerFiles "github.com/swaggo/files"
+	"github.com/swaggo/gin-swagger"
 	"github.com/zlylong/ops-mcp/backend/internal/app"
 	"github.com/zlylong/ops-mcp/backend/internal/audit"
 	"github.com/zlylong/ops-mcp/backend/internal/config"
+	_ "github.com/zlylong/ops-mcp/docs"
 )
 
 type Server struct {
@@ -25,19 +26,19 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 	r.Use(gin.Recovery(), cors())
 	s := &Server{cfg: cfg, registry: registry, auditor: auditor, logger: logger}
 	r.GET("/healthz", s.health)
-	
-	// Swagger UI - redirect /swagger/ to /swagger/index.html
+
+	// Swagger UI. The generated docs package is registered via blank import above.
+	swaggerHandler := ginSwagger.WrapHandler(swaggerFiles.NewHandler())
 	r.GET("/swagger", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/swagger/")
-	})
-	r.GET("/swagger/", func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
 	})
-	r.GET("/swagger/index.html", func(c *gin.Context) {
-		c.File("/root/ops-mcp/backend/swagger/index.html")
+	r.GET("/swagger/*any", func(c *gin.Context) {
+		if c.Param("any") == "/" || c.Param("any") == "" {
+			c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+			return
+		}
+		swaggerHandler(c)
 	})
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.NewHandler()))
-	
 	v1 := r.Group("/api/v1")
 	v1.GET("/dashboard/summary", s.dashboardSummary)
 	v1.GET("/tools", s.tools)

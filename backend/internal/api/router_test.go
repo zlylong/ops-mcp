@@ -250,3 +250,29 @@ func TestAuditRecords(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 }
+
+func TestSwaggerUIRoutes(t *testing.T) {
+	cfg := config.Config{}
+	registry := createTestRegistry()
+	auditor := &mockRecorder{}
+	logger := slog.Default()
+	r := NewRouter(cfg, registry, auditor, logger)
+
+	redirectReq := httptest.NewRequest(http.MethodGet, "/swagger", nil)
+	redirectResp := httptest.NewRecorder()
+	r.ServeHTTP(redirectResp, redirectReq)
+	assert.Equal(t, http.StatusMovedPermanently, redirectResp.Code)
+	assert.Equal(t, "/swagger/index.html", redirectResp.Header().Get("Location"))
+
+	indexReq := httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil)
+	indexResp := httptest.NewRecorder()
+	r.ServeHTTP(indexResp, indexReq)
+	assert.Equal(t, http.StatusOK, indexResp.Code)
+	assert.Contains(t, indexResp.Body.String(), "Swagger UI")
+
+	docReq := httptest.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
+	docResp := httptest.NewRecorder()
+	r.ServeHTTP(docResp, docReq)
+	assert.Equal(t, http.StatusOK, docResp.Code)
+	assert.Contains(t, docResp.Body.String(), "Ops MCP API")
+}
