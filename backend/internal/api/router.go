@@ -34,7 +34,7 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
 	})
 	r.GET("/swagger/index.html", func(c *gin.Context) {
-		c.FileFromFS("/root/ops-mcp/backend/swagger/index.html", &swaggerFiles.EmbeddedFS{})
+		c.File("/root/ops-mcp/backend/swagger/index.html")
 	})
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.NewHandler()))
 	
