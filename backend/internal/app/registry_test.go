@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/adapters/kubernetes"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/adapters/linux"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/adapters/prometheus"
+	"github.com/zlylong/darwin-ops-mcp/backend/internal/audit"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/domain"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/policy"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/storage"
@@ -342,4 +344,37 @@ func TestRegisterMockTools_IncludesCommonLinuxTools(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, code)
 	assert.Equal(t, "pending_approval", pending.Status)
 	assert.NotEmpty(t, pending.ApprovalID)
+}
+
+func TestExecute_HandlerError(t *testing.T) {
+	aud := audit.NewStore(nil)
+	execs := storage.NewExecutionStore()
+	approvals := storage.NewApprovalStore()
+	r := NewRegistry(policy.NewEngine(), aud, execs, approvals, domain.EnvDevelopment)
+
+	tool := domain.Tool{Name: "error.tool", Description: "errors", Category: "test", ReadOnly: true, Risk: domain.RiskLow}
+	wantErr := errors.New("handler failed")
+	handler := func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return nil, wantErr
+	}
+	_ = r.Register(tool, handler)
+
+	result, status, err := r.Execute(context.Background(), "error.tool", domain.ExecuteRequest{
+		Actor: "tester", Role: domain.RoleViewer, Target: "test", Parameters: map[string]any{},
+	})
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, wantErr)
+	assert.Equal(t, 500, status)
+	assert.Equal(t, "error", result.Status)
+	assert.NotEmpty(t, result.ExecutionID)
+
+	// Exactly one execution record must exist (no duplication)
+	executions := r.Executions()
+	var count int
+	for _, e := range executions {
+		if e.ID == result.ExecutionID {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "exactly one execution record for the failed run")
 }

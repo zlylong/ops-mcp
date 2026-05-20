@@ -60,13 +60,27 @@ func Mask(input map[string]any) map[string]any {
 			out[key] = "***MASKED***"
 			continue
 		}
-		if nested, ok := value.(map[string]any); ok {
-			out[key] = Mask(nested)
-			continue
-		}
-		out[key] = value
+		out[key] = maskValue(value)
 	}
 	return out
+}
+
+func maskValue(v any) any {
+	if v == nil {
+		return nil
+	}
+	switch val := v.(type) {
+	case map[string]any:
+		return Mask(val)
+	case []any:
+		out := make([]any, len(val))
+		for i, item := range val {
+			out[i] = maskValue(item)
+		}
+		return out
+	default:
+		return val
+	}
 }
 
 func isSensitiveKey(key string) bool {

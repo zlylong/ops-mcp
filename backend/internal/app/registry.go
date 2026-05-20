@@ -13,6 +13,12 @@ import (
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/storage"
 )
 
+// Sentinel errors for registry operations.
+var (
+	ErrToolNotFound  = errors.New("tool not found")
+	ErrAlreadyExists = errors.New("tool already exists")
+)
+
 type Handler func(context.Context, map[string]any) (map[string]any, error)
 
 type registeredTool struct {
@@ -67,7 +73,7 @@ func (r *Registry) UpdateTool(name string, tool domain.Tool) (domain.Tool, error
 	}
 	existing, exists := r.tools[name]
 	if !exists {
-		return domain.Tool{}, fmt.Errorf("tool not found: %s", name)
+		return domain.Tool{}, fmt.Errorf("%w: %s", ErrToolNotFound, name)
 	}
 	if err := validateTool(tool); err != nil {
 		return domain.Tool{}, err
@@ -82,7 +88,7 @@ func (r *Registry) DeleteTool(name string) error {
 		return errors.New("tool name is required")
 	}
 	if _, exists := r.tools[name]; !exists {
-		return fmt.Errorf("tool not found: %s", name)
+		return fmt.Errorf("%w: %s", ErrToolNotFound, name)
 	}
 	delete(r.tools, name)
 	return nil
@@ -230,6 +236,7 @@ func (r *Registry) Execute(ctx context.Context, name string, req domain.ExecuteR
 		exe.Status = "error"
 		exe.Reason = err.Error()
 		result.Message = err.Error()
+		result.Status = "error"
 		r.executions.Update(exe.ID, func(e *domain.Execution) { e.Status = "error"; e.Reason = err.Error() })
 		record := domain.AuditRecord{
 			ExecutionID: exe.ID,
