@@ -4,7 +4,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY backend ./backend
 RUN go install github.com/swaggo/swag/cmd/swag@latest
-RUN swag init --generalInfo /src/backend/internal/api/api.go --output /src/backend/docs
+WORKDIR /src/backend
+RUN swag init --generalInfo internal/api/api.go --output docs
+WORKDIR /src
 RUN CGO_ENABLED=0 go build -o /out/ops-mcp ./backend/cmd/server
 
 FROM debian:13-slim
