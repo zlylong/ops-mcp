@@ -38,7 +38,13 @@ func main() {
 	executions := storage.NewExecutionStore()
 	approvals := storage.NewApprovalStore()
 	registry := app.NewRegistry(policy.NewEngine(), auditor, executions, approvals, cfg.Environment)
-	if err := app.RegisterMockTools(registry, kubernetes.NewMockAdapter(), prometheus.NewMockAdapter(), linux.NewMockAdapter()); err != nil {
+	linuxTools := app.LinuxTools(linux.NewMockAdapter())
+	if cfg.Mode == "local" {
+		localLinux := linux.NewLocalAdapter()
+		linuxTools = localLinux
+		logger.Info("linux local adapter enabled", "procRoot", localLinux.ProcRoot)
+	}
+	if err := app.RegisterMockTools(registry, kubernetes.NewMockAdapter(), prometheus.NewMockAdapter(), linuxTools); err != nil {
 		logger.Error("register tools", "error", err)
 		os.Exit(1)
 	}

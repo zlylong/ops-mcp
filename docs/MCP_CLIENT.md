@@ -74,6 +74,6 @@ Agents that do not support MCP but do support OpenAPI can import `http://192.168
 
 ## Current limitations
 
-- Default deployment is safe mock mode unless real adapters are implemented/enabled.
+- Default deployment is safe mock mode. Set `DARWIN_OPS_MCP_MODE=local` to enable read-only Linux host collection from mounted `/host/proc` and `/host/etc`; Kubernetes and Prometheus remain mock adapters.
 - Stdio proxy packaging for clients that only support local stdio MCP is not included yet.
 - Approval replay is not automatic; after approval, re-run the tool with `approved: true`.

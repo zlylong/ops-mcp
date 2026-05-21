@@ -186,7 +186,7 @@ The legacy `OPS_MCP_*` and `MCP_*` prefixes are still accepted for backward comp
 
 
 - `DARWIN_OPS_MCP_ADDR` default `:8080`
-- `DARWIN_OPS_MCP_MODE` default `mock`
+- `DARWIN_OPS_MCP_MODE` default `mock`; set to `local` to enable read-only Linux host collection from mounted `/host/proc` and `/host/etc`
 - `DARWIN_OPS_MCP_ENV` default `development`; production write tools require approval
 - `DARWIN_OPS_MCP_SEED_MOCK` default `true`; set to `false` to start without sample executions/audit logs
 - `DARWIN_OPS_MCP_API_TOKEN` optional bearer token protecting `/mcp` and `/api/v1/*`

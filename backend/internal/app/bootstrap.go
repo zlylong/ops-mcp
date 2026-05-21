@@ -1,18 +1,33 @@
 package app
 
 import (
+	"context"
 	"strings"
 	"time"
 
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/adapters/kubernetes"
-	"github.com/zlylong/darwin-ops-mcp/backend/internal/adapters/linux"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/adapters/prometheus"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/domain"
 )
 
-// RegisterMockTools registers all mock adapter tools (k8s, prometheus, linux)
-// into the registry. It returns an error if a tool is already registered.
-func RegisterMockTools(r *Registry, k8s *kubernetes.MockAdapter, prom *prometheus.MockAdapter, linuxTools *linux.MockAdapter) error {
+// LinuxTools is the read-only Linux tool adapter contract used by the registry bootstrap.
+type LinuxTools interface {
+	SystemInfo(context.Context, map[string]any) (map[string]any, error)
+	LoadAverage(context.Context, map[string]any) (map[string]any, error)
+	MemoryUsage(context.Context, map[string]any) (map[string]any, error)
+	DiskUsage(context.Context, map[string]any) (map[string]any, error)
+	ProcessList(context.Context, map[string]any) (map[string]any, error)
+	NetworkInterfaces(context.Context, map[string]any) (map[string]any, error)
+	ServiceStatus(context.Context, map[string]any) (map[string]any, error)
+	JournalTail(context.Context, map[string]any) (map[string]any, error)
+	Ping(context.Context, map[string]any) (map[string]any, error)
+	DNSLookup(context.Context, map[string]any) (map[string]any, error)
+}
+
+// RegisterMockTools registers all adapter tools (k8s, prometheus, linux) into
+// the registry. Kubernetes and Prometheus currently use safe mock adapters;
+// Linux can be either safe mock mode or read-only local host mode.
+func RegisterMockTools(r *Registry, k8s *kubernetes.MockAdapter, prom *prometheus.MockAdapter, linuxTools LinuxTools) error {
 	registrations := []struct {
 		tool    domain.Tool
 		handler Handler

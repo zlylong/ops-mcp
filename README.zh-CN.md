@@ -186,7 +186,7 @@ go run ./backend/cmd/server --config config.example.json
 
 
 - `DARWIN_OPS_MCP_ADDR` 默认 `:8080`
-- `DARWIN_OPS_MCP_MODE` 默认 `mock`
+- `DARWIN_OPS_MCP_MODE` 默认 `mock`；设为 `local` 可从挂载的 `/host/proc` 和 `/host/etc` 启用只读 Linux 主机采集
 - `DARWIN_OPS_MCP_ENV` 默认 `development`；生产环境写工具需要审批
 - `DARWIN_OPS_MCP_SEED_MOCK` 默认 `true`；设为 `false` 可不生成示例执行/审计日志
 - `DARWIN_OPS_MCP_API_TOKEN` 可选 bearer token，用于保护 `/mcp` 和 `/api/v1/*`
