@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"strconv"
+	"time"
 
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/audit"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/domain"
@@ -31,8 +33,9 @@ type Registry struct {
 	policy      *policy.Engine
 	auditor     audit.Recorder
 	executions  *storage.ExecutionStore
-	approvals   *storage.ApprovalStore
-	environment domain.Environment
+	approvals    *storage.ApprovalStore
+	appStore     []domain.ToolApplication
+	environment  domain.Environment
 }
 
 func NewRegistry(policyEngine *policy.Engine, auditor audit.Recorder, executions *storage.ExecutionStore, approvals *storage.ApprovalStore, env domain.Environment) *Registry {
@@ -277,3 +280,40 @@ func (r *Registry) Approve(id string) (domain.Approval, error) {
 func (r *Registry) Reject(id string) (domain.Approval, error) {
 	return r.approvals.Decide(id, domain.ApprovalRejected)
 }
+
+// SubmitApplication records a tool access application and returns it.
+// High-risk (high/critical) tools are auto-set to pending; others default to approved.
+func (r *Registry) SubmitApplication(req domain.ToolApplicationRequest, actor string) domain.ToolApplication {
+	duration := req.DurationHrs
+	if duration <= 0 {
+		duration = 24
+	}
+	status := domain.ApplicationApproved
+	decision := "auto-approved (low/medium risk)"
+	if req.Risk == domain.RiskHigh || req.Risk == domain.RiskCritical {
+		status = domain.ApplicationPending
+		decision = "pending review (high/critical risk)"
+	}
+	app := domain.ToolApplication{
+		ID:          "app-" + strconv.FormatInt(time.Now().UTC().UnixNano(), 36),
+		Tool:        req.Tool,
+		Risk:        req.Risk,
+		Role:        req.Role,
+		Actor:       actor,
+		Reason:      req.Reason,
+		Status:      status,
+		Decision:    decision,
+		DurationHrs: duration,
+		CreatedAt:   time.Now().UTC(),
+	}
+	r.appStore = append(r.appStore, app)
+	return app
+}
+
+// Applications returns all tool access applications in creation order (newest last).
+func (r *Registry) Applications() []domain.ToolApplication {
+	out := make([]domain.ToolApplication, len(r.appStore))
+	copy(out, r.appStore)
+	return out
+}
+

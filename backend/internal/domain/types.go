@@ -169,3 +169,38 @@ type Approval struct {
 	CreatedAt   time.Time      `json:"createdAt"`
 	DecidedAt   *time.Time     `json:"decidedAt,omitempty"`
 }
+
+// ApplicationStatus represents the review status of a tool application.
+type ApplicationStatus string
+
+const (
+	ApplicationPending  ApplicationStatus = "pending"
+	ApplicationApproved ApplicationStatus = "approved"
+	ApplicationRejected ApplicationStatus = "rejected"
+)
+
+// ToolApplicationRequest is submitted by an actor to request access to a tool
+// at a specific role and environment level.
+type ToolApplicationRequest struct {
+	Tool        string        `json:"tool"`
+	Risk        RiskLevel     `json:"risk"`
+	Role        Role          `json:"role"`
+	Reason      string        `json:"reason"`
+	DurationHrs int           `json:"durationHrs"` // hours; 0 = default 24h
+	Parameters  map[string]any `json:"parameters,omitempty"`
+}
+
+// ToolApplication is the server-side record of a tool access application.
+type ToolApplication struct {
+	ID          string            `json:"id"`
+	Tool        string            `json:"tool"`
+	Risk        RiskLevel         `json:"risk"`
+	Role        Role              `json:"role"`
+	Actor       string            `json:"actor"`
+	Reason      string            `json:"reason"`
+	Status      ApplicationStatus `json:"status"`
+	Decision    string            `json:"decision,omitempty"`
+	DurationHrs int               `json:"durationHrs"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	DecidedAt   *time.Time        `json:"decidedAt,omitempty"`
+}

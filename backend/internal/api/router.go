@@ -57,6 +57,8 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 	v1.GET("/executions", s.executions)
 	v1.GET("/executions/:id", s.executionDetail)
 	v1.GET("/audit", s.auditRecords)
+	v1.GET("/applications", s.listApplications)
+	v1.POST("/applications", s.submitApplication)
 	v1.GET("/approvals", s.approvals)
 	v1.POST("/approvals/:id/approve", s.approve)
 	v1.POST("/approvals/:id/reject", s.reject)

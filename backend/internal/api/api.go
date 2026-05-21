@@ -133,3 +133,61 @@ func (s *Server) executeTool(c *gin.Context) {
 	}
 	c.JSON(status, result)
 }
+
+// submitApplication submits a tool access application for review or auto-approval
+//
+// @Summary Submit Tool Application
+// @Description Applies for access to a tool with a specific risk level, role, and reason.
+//     Returns 201 with the application record. High-risk (high/critical) applications
+//     are set to "pending" and require admin review; low/medium are auto-approved.
+// @Tags applications
+// @Accept json
+// @Produce json
+// @Param request body domain.ToolApplicationRequest true "Tool application request"
+// @Success 201 {object} domain.ToolApplication
+// @Failure 400 {object} map[string]string
+// @Router /applications [post]
+func (s *Server) submitApplication(c *gin.Context) {
+	var req domain.ToolApplicationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+	if req.Tool == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tool name is required"})
+		return
+	}
+	if req.Role == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "role is required"})
+		return
+	}
+	if req.Reason == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "reason is required"})
+		return
+	}
+	switch req.Risk {
+	case domain.RiskLow, domain.RiskMedium, domain.RiskHigh, domain.RiskCritical:
+		// valid
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid risk level: must be low, medium, high, or critical"})
+		return
+	}
+	actor := c.GetHeader("X-Actor")
+	if actor == "" {
+		actor = "anonymous"
+	}
+	app := s.registry.SubmitApplication(req, actor)
+	c.JSON(http.StatusCreated, app)
+}
+
+// listApplications returns all tool access applications
+//
+// @Summary List Applications
+// @Description Returns all tool access applications in creation order (newest last).
+// @Tags applications
+// @Produce json
+// @Success 200 {array} domain.ToolApplication
+// @Router /applications [get]
+func (s *Server) listApplications(c *gin.Context) {
+	c.JSON(http.StatusOK, s.registry.Applications())
+}
