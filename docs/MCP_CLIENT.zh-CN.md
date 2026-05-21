@@ -74,6 +74,6 @@ mcp_servers:
 
 ## 当前限制
 
-- 默认部署是安全 mock mode。设置 `DARWIN_OPS_MCP_MODE=local` 后可启用只读 Linux 主机采集，读取挂载的 `/host/proc` 和 `/host/etc`；Kubernetes 和 Prometheus 仍为 mock adapter。
+- 默认部署是安全 mock mode。设置 `DARWIN_OPS_MCP_MODE=local` 后可启用只读 Linux 主机采集，读取挂载的 `/host/proc`、`/host/etc` 和 `/host/usr/lib`；Kubernetes 和 Prometheus 仍为 mock adapter。
 - 仅支持本地 stdio MCP 的客户端还需要后续补 stdio proxy。
 - 审批后不会自动重放执行；审批完成后需要带 `approved: true` 重新调用工具。

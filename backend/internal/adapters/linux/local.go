@@ -179,6 +179,15 @@ func (a *LocalAdapter) DNSLookup(ctx context.Context, params map[string]any) (ma
 	return result, nil
 }
 
+func (a *LocalAdapter) hostname() string {
+	if data, err := os.ReadFile(filepath.Join(a.EtcRoot, "hostname")); err == nil {
+		if hostname := strings.TrimSpace(string(data)); hostname != "" {
+			return hostname
+		}
+	}
+	return strings.TrimSpace(a.readFirst("sys/kernel/hostname"))
+}
+
 func (a *LocalAdapter) readFirst(rel string) string {
 	data, _ := os.ReadFile(filepath.Join(a.ProcRoot, rel))
 	return strings.TrimSpace(string(data))
