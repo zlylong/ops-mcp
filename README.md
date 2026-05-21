@@ -203,6 +203,7 @@ Frontend environment variables:
 - [Tool Center User Guide](docs/TOOL_CENTER.md): beginner-friendly guide for searching, viewing, executing, creating, editing, deleting, approving, and auditing tools.
 - [API Documentation](docs/API.md): HTTP API and default tool catalog.
 - [MCP Client Integration](docs/MCP_CLIENT.md): connect external AI agents through MCP HTTP or OpenAPI.
+- [Read-only Local Linux Adapter](docs/LOCAL_LINUX_ADAPTER.md): enable opt-in real Linux host collection and verify its safety boundary.
 - [Testing Guide](docs/TESTING.md): backend test strategy and commands.
 - [Security Guide](docs/SECURITY.md): safety guarantees, masking, and policy boundaries.
 - [Architecture](docs/ARCHITECTURE.md): backend/frontend structure and request flow.
@@ -223,7 +224,7 @@ The frontend includes a left sidebar layout, top environment selector, top clust
 
 ## Implemented tools
 
-Default mock mode includes Kubernetes, Prometheus, and common Linux tools.
+Default mock mode includes Kubernetes, Prometheus, and common Linux tools. When `DARWIN_OPS_MCP_MODE=local` is enabled, Linux tools switch to read-only host collection while Kubernetes and Prometheus remain mock adapters.
 
 Linux tools:
 

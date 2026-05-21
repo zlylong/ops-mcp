@@ -22,9 +22,11 @@ darwin-ops-mcp 是一个 Docker-first 的全栈运维平台。
 - **Adapters：** `backend/internal/adapters/kubernetes` 和 `backend/internal/adapters/prometheus` 提供 mock 实现。
 - **REST Admin API：** `backend/internal/api` 通过 Gin 暴露 `/api/v1` 接口。
 
-## Mock mode
+## 运行模式
 
-`DARWIN_OPS_MCP_MODE=mock` 是默认模式。mock mode 返回确定性的 Kubernetes 和 Prometheus 数据，不会调用真实基础设施。
+`DARWIN_OPS_MCP_MODE=mock` 是默认模式。mock mode 返回确定性的 Kubernetes、Prometheus 和 Linux 数据，不会调用真实基础设施。
+
+`DARWIN_OPS_MCP_MODE=local` 会从挂载的 `/host/proc`、`/host/etc` 和 `/host/usr/lib` 启用只读 Linux 主机采集。在该模式下 Kubernetes 和 Prometheus 仍保持 mock adapter。详见 `docs/LOCAL_LINUX_ADAPTER.zh-CN.md`。
 
 ## API 风格
 

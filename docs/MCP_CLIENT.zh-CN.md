@@ -72,6 +72,8 @@ mcp_servers:
 
 如果外部 Agent 不支持 MCP，但支持 OpenAPI，可以导入 `http://192.168.20.166:8080/swagger/doc.json`，然后调用 `POST /api/v1/tools/{name}/execute`。
 
+Linux 主机采集细节见[只读本地 Linux Adapter](LOCAL_LINUX_ADAPTER.zh-CN.md)。
+
 ## 当前限制
 
 - 默认部署是安全 mock mode。设置 `DARWIN_OPS_MCP_MODE=local` 后可启用只读 Linux 主机采集，读取挂载的 `/host/proc`、`/host/etc` 和 `/host/usr/lib`；Kubernetes 和 Prometheus 仍为 mock adapter。

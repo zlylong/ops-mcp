@@ -45,9 +45,11 @@
 - `authorization`
 - `credential`
 
-## Mock mode
+## 运行模式
 
-`DARWIN_OPS_MCP_MODE=mock` 是默认模式。mock adapter 返回确定性的 Kubernetes 和 Prometheus 数据，不会访问外部基础设施。
+`DARWIN_OPS_MCP_MODE=mock` 是默认模式。mock adapter 返回确定性的 Kubernetes、Prometheus 和 Linux 数据，不会访问外部基础设施。
+
+`DARWIN_OPS_MCP_MODE=local` 会启用只读 Linux 主机采集。它不暴露任意 Shell 执行，也不会修改主机状态。它从只读挂载路径读取固定主机元数据，并只使用固定形态的 service status、journal tail、ping 和 DNS 命令。`linux.journal_tail` 仍然需要审批，因为日志可能暴露敏感上下文。详见 `docs/LOCAL_LINUX_ADAPTER.zh-CN.md`。
 
 ## PostgreSQL
 

@@ -72,6 +72,8 @@ mcp_servers:
 
 Agents that do not support MCP but do support OpenAPI can import `http://192.168.20.166:8080/swagger/doc.json` and call `POST /api/v1/tools/{name}/execute`.
 
+For Linux host collection details, see [Read-only Local Linux Adapter](LOCAL_LINUX_ADAPTER.md).
+
 ## Current limitations
 
 - Default deployment is safe mock mode. Set `DARWIN_OPS_MCP_MODE=local` to enable read-only Linux host collection from mounted `/host/proc`, `/host/etc`, and `/host/usr/lib`; Kubernetes and Prometheus remain mock adapters.

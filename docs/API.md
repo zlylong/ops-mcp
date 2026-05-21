@@ -18,9 +18,9 @@ Response example:
 
 ```json
 {
-  "mode": "mock",
+  "mode": "local",
   "environment": "development",
-  "tools": 9,
+  "tools": 19,
   "executions": 0,
   "auditRecords": 0,
   "approvals": 0
@@ -39,10 +39,28 @@ Returns one tool detail, including category, read-only flag, risk, approval requ
 
 Implemented tools:
 
+Linux tools:
+
+- `linux.system_info`
+- `linux.load_average`
+- `linux.memory_usage`
+- `linux.disk_usage`
+- `linux.process_list`
+- `linux.network_interfaces`
+- `linux.service_status`
+- `linux.journal_tail`
+- `linux.ping`
+- `linux.dns_lookup`
+
+Kubernetes tools:
+
 - `k8s.list_pods`
 - `k8s.get_pod_logs`
 - `k8s.list_events`
 - `k8s.get_deployment_status`
+
+Prometheus tools:
+
 - `prometheus.query`
 - `prometheus.service_error_rate`
 - `prometheus.service_latency_p95`
@@ -121,7 +139,7 @@ The MVP approval endpoints update approval state only. They do not automatically
 
 ## Default Linux Tool Catalog
 
-The mock backend now seeds a common Linux operations tool set in the Tools Center. These tools are read-only and execute through the same policy, approval, execution, and audit pipeline as every other MCP tool.
+The backend registers a common Linux operations tool set in the Tools Center. In `mock` mode these tools return deterministic demo data. In `local` mode they switch to read-only host collection while still using the same policy, approval, execution, and audit pipeline as every other MCP tool. See [Read-only Local Linux Adapter](LOCAL_LINUX_ADAPTER.md).
 
 - `linux.system_info`: host, kernel, distribution, architecture, uptime, and virtualization summary.
 - `linux.load_average`: 1/5/15 minute load averages and CPU core count.

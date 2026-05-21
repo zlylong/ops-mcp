@@ -45,9 +45,11 @@ Audit records mask sensitive input fields. Keys containing these markers are rep
 - `authorization`
 - `credential`
 
-## Mock mode
+## Runtime modes
 
-`DARWIN_OPS_MCP_MODE=mock` is the default. Mock adapters return deterministic Kubernetes and Prometheus data and do not contact external infrastructure.
+`DARWIN_OPS_MCP_MODE=mock` is the default. Mock adapters return deterministic Kubernetes, Prometheus, and Linux data and do not contact external infrastructure.
+
+`DARWIN_OPS_MCP_MODE=local` enables read-only Linux host collection. It does not expose arbitrary shell execution and does not mutate host state. It reads fixed host metadata from mounted read-only paths and uses fixed command shapes for service status, journal tail, ping, and DNS. `linux.journal_tail` remains approval-required because logs may expose sensitive context. See `docs/LOCAL_LINUX_ADAPTER.md`.
 
 ## PostgreSQL
 
