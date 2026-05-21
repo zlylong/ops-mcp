@@ -1,6 +1,66 @@
+basePath: /api/v1
+host: localhost:8080
 info:
-  contact: {}
+  contact:
+    email: support@darwin-ops-mcp.local
+    name: API Support
+    url: http://localhost:8080
+  description: |-
+    Darwin Ops MCP Backend API with Tool Registry, Policy Engine, and Approval Flow.
+    Returns immediate execution result or 202 + approval ID for high-risk tools.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: Darwin Ops MCP API
+  version: "1.0"
 paths:
+  /applications:
+    get:
+      description: Returns all tool access applications in creation order (newest
+        last).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+      summary: List Applications
+      tags:
+      - applications
+    post:
+      consumes:
+      - application/json
+      description: Applies for access to a tool with a specific risk level, role,
+        and reason.
+      parameters:
+      - description: Tool application request
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Submit Tool Application
+      tags:
+      - applications
   /tools:
     post:
       consumes:
