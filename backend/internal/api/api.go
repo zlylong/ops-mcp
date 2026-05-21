@@ -1,169 +1,135 @@
+// Darwin Ops MCP API
+//
 // @title Darwin Ops MCP API
 // @version 1.0
 // @description Darwin Ops MCP Backend API with Tool Registry, Policy Engine, and Approval Flow.
-
+// @description Returns immediate execution result or 202 + approval ID for high-risk tools.
 // @contact.name API Support
 // @contact.url http://localhost:8080
 // @contact.email support@darwin-ops-mcp.local
-
 // @license.name MIT
 // @license.url https://opensource.org/licenses/MIT
-
 // @host localhost:8080
 // @BasePath /api/v1
-
 package api
 
 import (
+	"errors"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
+	"github.com/zlylong/darwin-ops-mcp/backend/internal/app"
+	"github.com/zlylong/darwin-ops-mcp/backend/internal/domain"
 )
 
-// @Summary Health Check
-// @Description Returns the health status of the API
-// @Tags system
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Router /healthz [get]
-func healthz(c *gin.Context) {
-	c.JSON(200, gin.H{"status": "ok", "mode": "mock"})
-}
-
-// @Summary Get Dashboard Summary
-// @Description Returns dashboard statistics including alerts, approvals, and executions count
-// @Tags dashboard
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Router /dashboard/summary [get]
-func dashboardSummary(c *gin.Context) {
-	c.JSON(200, gin.H{"data": gin.H{}})
-}
-
-// @Summary List All Tools
-// @Description Returns a list of all available tools
-// @Tags tools
-// @Produce json
-// @Success 200 {array} map[string]interface{}
-// @Router /tools [get]
-func toolsList(c *gin.Context) {
-	c.JSON(200, gin.H{"data": []interface{}{}})
-}
-
+// createTool creates a custom tool definition in the runtime registry
+//
 // @Summary Create Tool
 // @Description Creates a custom tool definition in the runtime registry
 // @Tags tools
 // @Accept json
 // @Produce json
-// @Param request body object true "Tool definition"
-// @Success 201 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Param request body map[string]any true "Tool definition"
+// @Success 201 {object} object
+// @Failure 400 {object} map[string]string
+// @Failure 409 {object} map[string]string
 // @Router /tools [post]
-func createTool(c *gin.Context) {
-	c.JSON(201, gin.H{"data": gin.H{}})
+func (s *Server) createTool(c *gin.Context) {
+	var tool domain.Tool
+	if err := c.ShouldBindJSON(&tool); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+		return
+	}
+	created, err := s.registry.CreateTool(tool)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, app.ErrAlreadyExists) {
+			status = http.StatusConflict
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, created)
 }
 
-// @Summary Get Tool Details
-// @Description Returns detailed information about a specific tool
-// @Tags tools
-// @Param name path string true "Tool name"
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Router /tools/{name} [get]
-func toolDetail(c *gin.Context) {
-	c.JSON(200, gin.H{"data": gin.H{}})
-}
-
+// updateTool updates an existing tool definition
+//
 // @Summary Update Tool
-// @Description Updates an existing tool definition
+// @Description Updates an existing tool definition in the runtime registry
 // @Tags tools
-// @Param name path string true "Tool name"
 // @Accept json
 // @Produce json
-// @Param request body object true "Tool definition"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Param name path string true "Tool name"
+// @Param request body map[string]any true "Tool definition"
+// @Success 200 {object} object
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
 // @Router /tools/{name} [put]
-func updateTool(c *gin.Context) {
-	c.JSON(200, gin.H{"data": gin.H{}})
+func (s *Server) updateTool(c *gin.Context) {
+	var tool domain.Tool
+	if err := c.ShouldBindJSON(&tool); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+		return
+	}
+	updated, err := s.registry.UpdateTool(c.Param("name"), tool)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, app.ErrToolNotFound) {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
 }
 
+// deleteTool deletes an existing tool definition from the runtime registry
+//
 // @Summary Delete Tool
 // @Description Deletes an existing tool definition from the runtime registry
 // @Tags tools
 // @Param name path string true "Tool name"
-// @Produce json
-// @Success 204 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 204
+// @Failure 404 {object} map[string]string
 // @Router /tools/{name} [delete]
-func deleteTool(c *gin.Context) {
-	c.Status(204)
+func (s *Server) deleteTool(c *gin.Context) {
+	if err := s.registry.DeleteTool(c.Param("name")); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, app.ErrToolNotFound) {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
+// executeTool executes a tool with the provided parameters
+//
 // @Summary Execute Tool
-// @Description Executes a tool with the provided parameters
+// @Description Executes a tool with the provided parameters. Returns 202 if approval
+//     is required; returns 200 on immediate execution.
 // @Tags tools
+// @Accept json
+// @Produce json
 // @Param name path string true "Tool name"
-// @Accept json
-// @Produce json
-// @Param request body object true "Execution request"
-// @Success 200 {object} map[string]interface{} "Immediate execution result"
-// @Success 202 {object} map[string]interface{} "Execution accepted, requires approval"
-// @Failure 400 {object} map[string]interface{} "Invalid request"
-// @Failure 403 {object} map[string]interface{} "Permission denied"
-// @Failure 404 {object} map[string]interface{} "Tool not found"
+// @Param request body map[string]any true "Execution request"
+// @Success 200 {object} object
+// @Success 202 {object} object
+// @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
 // @Router /tools/{name}/execute [post]
-func executeTool(c *gin.Context) {
-	c.JSON(200, gin.H{"data": gin.H{}})
-}
-
-// @Summary List Approvals
-// @Description Returns a list of pending approvals
-// @Tags approvals
-// @Produce json
-// @Success 200 {array} map[string]interface{}
-// @Router /approvals [get]
-func approvalsList(c *gin.Context) {
-	c.JSON(200, gin.H{"data": []interface{}{}})
-}
-
-// @Summary Approve Execution
-// @Description Approves a pending execution request
-// @Tags approvals
-// @Param id path string true "Approval ID"
-// @Accept json
-// @Produce json
-// @Param request body object true "Action request"
-// @Success 200 {object} map[string]interface{}
-// @Router /approvals/{id}/approve [post]
-func approveApproval(c *gin.Context) {
-	c.JSON(200, gin.H{"data": gin.H{}})
-}
-
-// @Summary Reject Execution
-// @Description Rejects a pending execution request
-// @Tags approvals
-// @Param id path string true "Approval ID"
-// @Accept json
-// @Produce json
-// @Param request body object true "Action request"
-// @Success 200 {object} map[string]interface{}
-// @Router /approvals/{id}/reject [post]
-func rejectApproval(c *gin.Context) {
-	c.JSON(200, gin.H{"data": gin.H{}})
-}
-
-// @Summary List Audit Records
-// @Description Returns a list of audit records with filtering options
-// @Tags audit
-// @Param actor query string false "Filter by actor"
-// @Param tool query string false "Filter by tool"
-// @Param env query string false "Filter by environment"
-// @Param risk query string false "Filter by risk level"
-// @Param status query string false "Filter by status"
-// @Produce json
-// @Success 200 {array} map[string]interface{}
-// @Router /audit [get]
-func auditRecords(c *gin.Context) {
-	c.JSON(200, gin.H{"data": []interface{}{}})
+func (s *Server) executeTool(c *gin.Context) {
+	var req executeHTTP
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+		return
+	}
+	result, status, err := s.registry.Execute(c.Request.Context(), c.Param("name"), domainRequest(req))
+	if err != nil {
+		c.JSON(status, gin.H{"error": result.Message, "executionId": result.ExecutionID, "auditId": result.AuditID, "approvalId": result.ApprovalID})
+		return
+	}
+	c.JSON(status, result)
 }

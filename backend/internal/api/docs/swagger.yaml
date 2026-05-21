@@ -1,18 +1,5 @@
-basePath: /api/v1
-host: localhost:8080
 info:
-  contact:
-    email: support@darwin-ops-mcp.local
-    name: API Support
-    url: http://localhost:8080
-  description: |-
-    Darwin Ops MCP Backend API with Tool Registry, Policy Engine, and Approval Flow.
-    Returns immediate execution result or 202 + approval ID for high-risk tools.
-  license:
-    name: MIT
-    url: https://opensource.org/licenses/MIT
-  title: Darwin Ops MCP API
-  version: "1.0"
+  contact: {}
 paths:
   /tools:
     post:

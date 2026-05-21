@@ -1,21 +1,8 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Darwin Ops MCP Backend API with Tool Registry, Policy Engine, and Approval Flow.\nReturns immediate execution result or 202 + approval ID for high-risk tools.",
-        "title": "Darwin Ops MCP API",
-        "contact": {
-            "name": "API Support",
-            "url": "http://localhost:8080",
-            "email": "support@darwin-ops-mcp.local"
-        },
-        "license": {
-            "name": "MIT",
-            "url": "https://opensource.org/licenses/MIT"
-        },
-        "version": "1.0"
+        "contact": {}
     },
-    "host": "localhost:8080",
-    "basePath": "/api/v1",
     "paths": {
         "/tools": {
             "post": {
