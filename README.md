@@ -189,6 +189,7 @@ The legacy `OPS_MCP_*` and `MCP_*` prefixes are still accepted for backward comp
 - `DARWIN_OPS_MCP_MODE` default `mock`
 - `DARWIN_OPS_MCP_ENV` default `development`; production write tools require approval
 - `DARWIN_OPS_MCP_SEED_MOCK` default `true`; set to `false` to start without sample executions/audit logs
+- `DARWIN_OPS_MCP_API_TOKEN` optional bearer token protecting `/mcp` and `/api/v1/*`
 - `DARWIN_OPS_MCP_CONFIG` optional JSON config file path
 - `DATABASE_URL` PostgreSQL connection string
 
@@ -201,6 +202,7 @@ Frontend environment variables:
 
 - [Tool Center User Guide](docs/TOOL_CENTER.md): beginner-friendly guide for searching, viewing, executing, creating, editing, deleting, approving, and auditing tools.
 - [API Documentation](docs/API.md): HTTP API and default tool catalog.
+- [MCP Client Integration](docs/MCP_CLIENT.md): connect external AI agents through MCP HTTP or OpenAPI.
 - [Testing Guide](docs/TESTING.md): backend test strategy and commands.
 - [Security Guide](docs/SECURITY.md): safety guarantees, masking, and policy boundaries.
 - [Architecture](docs/ARCHITECTURE.md): backend/frontend structure and request flow.

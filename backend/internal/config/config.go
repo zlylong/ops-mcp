@@ -12,6 +12,7 @@ type Config struct {
 	DatabaseURL  string
 	Addr         string
 	SeedMockData bool
+	APIToken     string
 }
 
 func NewConfig() Config {
@@ -44,6 +45,9 @@ func Load() Config {
 	}
 	if seed := firstEnv("DARWIN_OPS_MCP_SEED_MOCK", "OPS_MCP_SEED_MOCK", "MCP_SEED_MOCK_DATA"); seed != "" {
 		cfg.SeedMockData = seed == "true" || seed == "1"
+	}
+	if token := firstEnv("DARWIN_OPS_MCP_API_TOKEN", "OPS_MCP_API_TOKEN", "MCP_API_TOKEN"); token != "" {
+		cfg.APIToken = token
 	}
 
 	return cfg

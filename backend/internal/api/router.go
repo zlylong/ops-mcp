@@ -33,6 +33,11 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 	s := &Server{cfg: cfg, registry: registry, auditor: auditor, logger: logger}
 	r.GET("/healthz", s.health)
 
+	protected := r.Group("")
+	protected.Use(authRequired(cfg.APIToken))
+	protected.GET("/mcp", s.mcp)
+	protected.POST("/mcp", s.mcp)
+
 	// Swagger UI
 	swaggerHandler := ginSwagger.WrapHandler(swaggerFiles.NewHandler())
 	r.GET("/swagger", func(c *gin.Context) {
@@ -46,7 +51,7 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 		swaggerHandler(c)
 	})
 
-	v1 := r.Group("/api/v1")
+	v1 := protected.Group("/api/v1")
 	v1.GET("/dashboard/summary", s.dashboardSummary)
 	v1.GET("/tools", s.tools)
 	v1.POST("/tools", s.createTool)

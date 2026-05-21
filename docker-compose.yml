@@ -14,6 +14,7 @@ services:
       DARWIN_OPS_MCP_MODE: "mock"
       DARWIN_OPS_MCP_ENV: "development"
       DARWIN_OPS_MCP_SEED_MOCK: "true"
+      DARWIN_OPS_MCP_API_TOKEN: "${DARWIN_OPS_MCP_API_TOKEN:-}"
       DATABASE_URL: "postgres://darwin_ops_mcp:darwin_ops_mcp@postgres:5432/darwin_ops_mcp?sslmode=disable"
     ports:
       - "8080:8080"

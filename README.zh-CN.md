@@ -189,6 +189,7 @@ go run ./backend/cmd/server --config config.example.json
 - `DARWIN_OPS_MCP_MODE` 默认 `mock`
 - `DARWIN_OPS_MCP_ENV` 默认 `development`；生产环境写工具需要审批
 - `DARWIN_OPS_MCP_SEED_MOCK` 默认 `true`；设为 `false` 可不生成示例执行/审计日志
+- `DARWIN_OPS_MCP_API_TOKEN` 可选 bearer token，用于保护 `/mcp` 和 `/api/v1/*`
 - `DARWIN_OPS_MCP_CONFIG` 可选 JSON 配置文件路径
 - `DATABASE_URL` PostgreSQL 连接字符串
 
@@ -201,6 +202,7 @@ go run ./backend/cmd/server --config config.example.json
 
 - [工具中心使用文档](docs/TOOL_CENTER.zh-CN.md)：面向新手，详细说明工具搜索、查看、执行、新增、编辑、删除、审批和审计逻辑。
 - [API 文档](docs/API.zh-CN.md)：HTTP API 与默认工具目录。
+- [MCP 客户端接入](docs/MCP_CLIENT.zh-CN.md)：通过 MCP HTTP 或 OpenAPI 接入外部 AI Agent。
 - [测试指南](docs/TESTING.zh-CN.md)：后端测试策略与命令。
 - [安全指南](docs/SECURITY.zh-CN.md)：安全保证、脱敏和策略边界。
 - [架构文档](docs/ARCHITECTURE.zh-CN.md)：后端/前端结构和请求流。
