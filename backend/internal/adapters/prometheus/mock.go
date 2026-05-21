@@ -7,33 +7,53 @@ type MockAdapter struct{}
 func NewMockAdapter() *MockAdapter { return &MockAdapter{} }
 
 func (a *MockAdapter) Query(ctx context.Context, params map[string]any) (map[string]any, error) {
-	query := "up"
-	if v, ok := params["query"].(string); ok && v != "" {
-		query = v
+	query := stringParam(params, "query", "up")
+	time := stringParam(params, "time", "")
+	result := []map[string]any{{"metric": map[string]string{"job": "mock"}, "value": []any{1234567890.0, "1"}}}
+	if time != "" {
+		result = []map[string]any{{"metric": map[string]string{"job": "mock"}, "value": []any{1234567890.0, "1"}}}
 	}
-	return map[string]any{"query": query, "resultType": "vector", "result": []map[string]any{{"metric": map[string]string{"job": "mock"}, "value": []any{1234567890, "1"}}}}, nil
+	return map[string]any{"query": query, "time": time, "resultType": "vector", "result": result}, nil
 }
+
 func (a *MockAdapter) ServiceErrorRate(ctx context.Context, params map[string]any) (map[string]any, error) {
-	return map[string]any{"service": service(params), "errorRate": 0.012, "window": "5m"}, nil
+	service := stringParam(params, "service", "api")
+	window := stringParam(params, "window", "5m")
+	return map[string]any{"service": service, "errorRate": 0.012, "window": window}, nil
 }
+
 func (a *MockAdapter) ServiceLatencyP95(ctx context.Context, params map[string]any) (map[string]any, error) {
-	return map[string]any{"service": service(params), "latencyMsP95": 187.4, "window": "5m"}, nil
+	service := stringParam(params, "service", "api")
+	window := stringParam(params, "window", "5m")
+	return map[string]any{"service": service, "latencyMsP95": 187.4, "window": window}, nil
 }
+
 func (a *MockAdapter) PodCPUUsage(ctx context.Context, params map[string]any) (map[string]any, error) {
-	return map[string]any{"pod": pod(params), "cpuCores": 0.18}, nil
+	pod := stringParam(params, "pod", "api-7df8c9")
+	namespace := stringParam(params, "namespace", "default")
+	return map[string]any{"pod": pod, "namespace": namespace, "cpuCores": 0.18}, nil
 }
+
 func (a *MockAdapter) PodMemoryUsage(ctx context.Context, params map[string]any) (map[string]any, error) {
-	return map[string]any{"pod": pod(params), "memoryMiB": 246.5}, nil
+	pod := stringParam(params, "pod", "api-7df8c9")
+	namespace := stringParam(params, "namespace", "default")
+	return map[string]any{"pod": pod, "namespace": namespace, "memoryMiB": 246.5}, nil
 }
-func service(params map[string]any) string {
-	if v, ok := params["service"].(string); ok && v != "" {
+
+func stringParam(params map[string]any, key, fallback string) string {
+	if v, ok := params[key].(string); ok && v != "" {
 		return v
 	}
-	return "api"
+	return fallback
 }
-func pod(params map[string]any) string {
-	if v, ok := params["pod"].(string); ok && v != "" {
+
+func intParam(params map[string]any, key string, fallback int) int {
+	switch v := params[key].(type) {
+	case int:
 		return v
+	case float64:
+		return int(v)
+	default:
+		return fallback
 	}
-	return "api-7df8c9"
 }
