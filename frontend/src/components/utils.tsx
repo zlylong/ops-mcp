@@ -1,4 +1,5 @@
 import { Tag } from 'antd';
+import type { ParamSchema } from '../types';
 
 export function RiskTag({ risk }: { risk?: string }) {
   if (risk === 'critical') return <Tag color="red">严重</Tag>;
@@ -33,12 +34,31 @@ export function parseJsonObject(text: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-export function defaultInput(tool?: { inputSchema?: Record<string, string> }) {
+function schemaType(schema: ParamSchema | string): string {
+  return typeof schema === 'string' ? schema.replace(/\?$/, '') : schema.type;
+}
+
+function schemaRequired(schema: ParamSchema | string): boolean {
+  return typeof schema === 'string' ? !schema.endsWith('?') : !!schema.required;
+}
+
+function schemaDefault(key: string, schema: ParamSchema | string): unknown {
+  if (typeof schema !== 'string' && schema.default !== undefined) return schema.default;
+  const type = schemaType(schema);
+  if (type === 'number') return 10;
+  if (type === 'boolean') return false;
+  if (key === 'query') return 'up';
+  if (key === 'namespace') return 'default';
+  if (key === 'deployment' || key === 'service') return 'api';
+  if (key === 'pod') return 'api-7dc8b5d9b8-xk2wq';
+  return '';
+}
+
+export function defaultInput(tool?: { inputSchema?: Record<string, ParamSchema | string> }) {
   const out: Record<string, unknown> = {};
-  Object.entries(tool?.inputSchema ?? {}).forEach(([key, type]) => {
-    const optional = type.endsWith('?');
-    if (optional) return;
-    out[key] = type.startsWith('number') ? 10 : key === 'query' ? 'up' : key === 'namespace' ? 'default' : key === 'deployment' ? 'api' : key === 'service' ? 'api' : key === 'pod' ? 'api-7dc8b5d9b8-xk2wq' : '';
+  Object.entries(tool?.inputSchema ?? {}).forEach(([key, schema]) => {
+    if (!schemaRequired(schema)) return;
+    out[key] = schemaDefault(key, schema);
   });
   return JSON.stringify(out, null, 2);
 }

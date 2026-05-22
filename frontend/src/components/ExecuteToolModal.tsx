@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Button, Form, Input, Modal, Select, Space, Typography, message } from 'antd';
+import { Alert, Button, Form, Input, Modal, Select, Space, Switch, Typography, message } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import type { ExecuteResult, Role, Tool } from '../types';
@@ -57,7 +57,7 @@ export function ExecuteToolModal({ tool, open, onClose }: Props) {
               <Form.Item name="actor" label="执行人" rules={[{ required: true }]}><Input placeholder="admin" /></Form.Item>
               <Form.Item name="role" label="角色" rules={[{ required: true }]}><Select style={{ width: 140 }} options={[{ value: 'viewer', label: 'viewer' }, { value: 'operator', label: 'operator' }, { value: 'admin', label: 'admin' }]} /></Form.Item>
               <Form.Item name="target" label="目标" rules={[{ required: true }]}><Input placeholder="local-dev" /></Form.Item>
-              <Form.Item name="approved" label="授权"><Select style={{ width: 140 }} options={[{ value: false, label: '未授权' }, { value: true, label: '已授权' }]} /></Form.Item>
+              <Form.Item name="approved" label="授权" valuePropName="checked"><Switch checkedChildren="已授权" unCheckedChildren="未授权" /></Form.Item>
             </Space>
             <Form.Item name="parameters" label="参数 JSON" rules={[{ required: true }, { validator: async (_, value) => { parseJsonObject(value); } }]}>
               <Input.TextArea rows={8} spellCheck={false} className="json-input" />
