@@ -11,7 +11,7 @@ export function ApprovalsPage() {
   const queryClient = useQueryClient();
   const decide = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'approve' | 'reject' }) => action === 'approve' ? api.approve(id) : api.reject(id),
-    onSuccess: () => { message.success('审批状态已更新'); queryClient.invalidateQueries({ queryKey: ['approvals'] }); queryClient.invalidateQueries({ queryKey: ['summary'] }); },
+    onSuccess: () => { message.success('审批状态已更新，批准的任务会自动执行'); queryClient.invalidateQueries({ queryKey: ['approvals'] }); queryClient.invalidateQueries({ queryKey: ['executions'] }); queryClient.invalidateQueries({ queryKey: ['audit'] }); queryClient.invalidateQueries({ queryKey: ['summary'] }); },
     onError: (err) => message.error(err instanceof Error ? err.message : '审批失败'),
   });
   const data = (approvals.data ?? []).filter((item) => status === 'all' || item.status === status);

@@ -291,3 +291,62 @@ func TestExecute_HandlerError(t *testing.T) {
 	}
 	assert.Equal(t, 1, count, "exactly one execution record for the failed run")
 }
+
+func TestRegistry_ApproveExecutesPendingApproval(t *testing.T) {
+	registry := createTestRegistry()
+	err := registry.Register(domain.Tool{Name: "approval.exec", ReadOnly: true, Risk: domain.RiskMedium, RequiresApproval: true, InputSchema: map[string]domain.ParamSchema{"message": {Type: "string", Required: true}}}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"echo": params["message"]}, nil
+	})
+	assert.NoError(t, err)
+
+	result, code, err := registry.Execute(context.Background(), "approval.exec", domain.ExecuteRequest{Actor: "agent", Role: domain.RoleViewer, Target: "host=demo", Parameters: map[string]any{"message": "hello"}})
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusAccepted, code)
+
+	approval, err := registry.Approve(result.ApprovalID)
+	assert.NoError(t, err)
+	assert.Equal(t, domain.ApprovalApproved, approval.Status)
+
+	execution, ok := registry.Execution(result.ExecutionID)
+	assert.True(t, ok)
+	assert.Equal(t, "completed", execution.Status)
+	assert.Equal(t, "approved by task approval", execution.Reason)
+	assert.Equal(t, "hello", execution.Result["echo"])
+	assert.NotEmpty(t, execution.AuditID)
+}
+
+func TestRegistry_ExecuteValidationFailure(t *testing.T) {
+	registry := createTestRegistry()
+	err := registry.Register(domain.Tool{Name: "validation.tool", ReadOnly: true, Risk: domain.RiskLow, InputSchema: map[string]domain.ParamSchema{"host": {Type: "string", Required: true}}}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
+		return map[string]any{"ok": true}, nil
+	})
+	assert.NoError(t, err)
+
+	result, code, err := registry.Execute(context.Background(), "validation.tool", domain.ExecuteRequest{Actor: "agent", Role: domain.RoleViewer, Target: "host=demo", Parameters: map[string]any{}})
+	assert.Error(t, err)
+	assert.Equal(t, http.StatusBadRequest, code)
+	assert.Equal(t, "validation_failed", result.Status)
+	assert.Contains(t, result.Message, "missing required parameter")
+}
+
+func TestRegistry_ApproveApplicationCreatesRequestedTool(t *testing.T) {
+	registry := createTestRegistry()
+	application := registry.SubmitApplication(domain.ToolApplicationRequest{
+		Tool:   "custom.requested",
+		Risk:   domain.RiskHigh,
+		Role:   domain.RoleOperator,
+		Reason: "need new approved tool",
+		Parameters: map[string]any{"toolDefinition": map[string]any{
+			"name": "custom.requested", "description": "Requested custom tool", "category": "custom", "readOnly": true, "risk": "low", "requiresApproval": false,
+			"inputSchema": map[string]any{"message": map[string]any{"type": "string", "required": false}},
+		}},
+	}, "agent")
+	assert.Equal(t, domain.ApplicationPending, application.Status)
+
+	approved, err := registry.ApproveApplication(application.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, domain.ApplicationApproved, approved.Status)
+	tool, ok := registry.Get("custom.requested")
+	assert.True(t, ok)
+	assert.Equal(t, "Requested custom tool", tool.Description)
+}

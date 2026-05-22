@@ -7,9 +7,9 @@ import (
 
 // ParamSchema describes a single input parameter for a tool.
 type ParamSchema struct {
-	Type        string `json:"type"`           // "string" | "number" | "boolean"
-	Required    bool   `json:"required"`       // true = mandatory, false = optional
-	Description string `json:"description"`    // human-readable description
+	Type        string `json:"type"`              // "string" | "number" | "boolean"
+	Required    bool   `json:"required"`          // true = mandatory, false = optional
+	Description string `json:"description"`       // human-readable description
 	Default     any    `json:"default,omitempty"` // optional default value
 }
 
@@ -182,11 +182,11 @@ const (
 // ToolApplicationRequest is submitted by an actor to request access to a tool
 // at a specific role and environment level.
 type ToolApplicationRequest struct {
-	Tool        string        `json:"tool"`
-	Risk        RiskLevel     `json:"risk"`
-	Role        Role          `json:"role"`
-	Reason      string        `json:"reason"`
-	DurationHrs int           `json:"durationHrs"` // hours; 0 = default 24h
+	Tool        string         `json:"tool"`
+	Risk        RiskLevel      `json:"risk"`
+	Role        Role           `json:"role"`
+	Reason      string         `json:"reason"`
+	DurationHrs int            `json:"durationHrs"` // hours; 0 = default 24h
 	Parameters  map[string]any `json:"parameters,omitempty"`
 }
 
@@ -201,6 +201,7 @@ type ToolApplication struct {
 	Status      ApplicationStatus `json:"status"`
 	Decision    string            `json:"decision,omitempty"`
 	DurationHrs int               `json:"durationHrs"`
+	Parameters  map[string]any    `json:"parameters,omitempty"`
 	CreatedAt   time.Time         `json:"createdAt"`
 	DecidedAt   *time.Time        `json:"decidedAt,omitempty"`
 }

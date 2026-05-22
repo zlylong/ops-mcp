@@ -36,3 +36,7 @@ REST endpoints are versioned under `/api/v1`. See `docs/API.md`.
 ## Future Helm deployment
 
 Docker Compose is the first deployment target. Helm should be added later after persistence, auth, approval replay, and real adapter boundaries are stable.
+
+## MCP Approval Architecture Addendum
+
+See [APPROVAL_ARCHITECTURE.md](APPROVAL_ARCHITECTURE.md) for the layered target architecture, tool approval, task approval, and third-party server command execution flow.

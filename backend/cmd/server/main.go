@@ -13,6 +13,7 @@ import (
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/adapters/kubernetes"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/adapters/linux"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/adapters/prometheus"
+	"github.com/zlylong/darwin-ops-mcp/backend/internal/adapters/remote"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/api"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/app"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/audit"
@@ -46,6 +47,10 @@ func main() {
 	}
 	if err := app.RegisterMockTools(registry, kubernetes.NewMockAdapter(), prometheus.NewMockAdapter(), linuxTools); err != nil {
 		logger.Error("register tools", "error", err)
+		os.Exit(1)
+	}
+	if err := app.RegisterRemoteTools(registry, remote.NewSSHAdapter()); err != nil {
+		logger.Error("register remote tools", "error", err)
 		os.Exit(1)
 	}
 	if cfg.Mode == "mock" && cfg.SeedMockData {

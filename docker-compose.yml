@@ -22,6 +22,7 @@ services:
       - /proc:/host/proc:ro
       - /etc:/host/etc:ro
       - /usr/lib:/host/usr/lib:ro
+      - /root/.ssh:/root/.ssh:ro
     depends_on:
       postgres:
         condition: service_healthy

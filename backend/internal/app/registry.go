@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -167,6 +168,32 @@ func (r *Registry) Execute(ctx context.Context, name string, req domain.ExecuteR
 		result.Message = "tool not found"
 		return result, 404, errors.New(result.Message)
 	}
+	if err := t.tool.ValidateParams(req.Parameters); err != nil {
+		result.Message = err.Error()
+		exe := r.executions.Add(domain.Execution{
+			Tool:       name,
+			Actor:      req.Actor,
+			Role:       req.Role,
+			Target:     req.Target,
+			Status:     "validation_failed",
+			Reason:     result.Message,
+			Parameters: req.Parameters,
+		})
+		result.ExecutionID = exe.ID
+		record := r.auditor.Record(domain.AuditRecord{
+			ExecutionID: exe.ID,
+			Actor:       req.Actor,
+			Role:        req.Role,
+			Action:      "tool." + name,
+			Target:      req.Target,
+			Allowed:     false,
+			Reason:      result.Message,
+			Parameters:  req.Parameters,
+		})
+		result.AuditID = record.ID
+		result.Status = "validation_failed"
+		return result, 400, err
+	}
 	policyReq := domain.PolicyRequest{
 		Tool:        t.tool,
 		Actor:       req.Actor,
@@ -265,9 +292,10 @@ func (r *Registry) Execute(ctx context.Context, name string, req domain.ExecuteR
 		Allowed:     true,
 		Reason:      "approved",
 	}
-	r.auditor.Record(record)
+	record = r.auditor.Record(record)
 	result.ExecutionID = exe.ID
 	result.AuditID = record.ID
+	_ = r.executions.Update(exe.ID, func(e *domain.Execution) { e.AuditID = record.ID })
 	result.Data = output
 	return result, 200, nil
 }
@@ -276,10 +304,75 @@ func (r *Registry) Executions() []domain.Execution               { return r.exec
 func (r *Registry) Execution(id string) (domain.Execution, bool) { return r.executions.Get(id) }
 func (r *Registry) Approvals() []domain.Approval                 { return r.approvals.List() }
 func (r *Registry) Approve(id string) (domain.Approval, error) {
-	return r.approvals.Decide(id, domain.ApprovalApproved)
+	approval, err := r.approvals.Decide(id, domain.ApprovalApproved)
+	if err != nil {
+		return approval, err
+	}
+	_ = r.executeApprovedApproval(context.Background(), approval)
+	return approval, nil
 }
 func (r *Registry) Reject(id string) (domain.Approval, error) {
-	return r.approvals.Decide(id, domain.ApprovalRejected)
+	approval, err := r.approvals.Decide(id, domain.ApprovalRejected)
+	if err != nil {
+		return approval, err
+	}
+	_ = r.executions.Update(approval.ExecutionID, func(e *domain.Execution) {
+		e.Status = "rejected"
+		e.Reason = "rejected by task approval"
+	})
+	return approval, nil
+}
+
+func (r *Registry) executeApprovedApproval(ctx context.Context, approval domain.Approval) error {
+	exe, ok := r.executions.Get(approval.ExecutionID)
+	if !ok || exe.Status != "pending_approval" {
+		return nil
+	}
+	registered, ok := r.tools[approval.Tool]
+	if !ok {
+		_ = r.executions.Update(exe.ID, func(e *domain.Execution) {
+			e.Status = "error"
+			e.Reason = "approved tool no longer exists"
+		})
+		return ErrToolNotFound
+	}
+	output, err := registered.handler(ctx, exe.Parameters)
+	if err != nil {
+		_ = r.executions.Update(exe.ID, func(e *domain.Execution) {
+			e.Status = "error"
+			e.Reason = err.Error()
+			e.Result = output
+		})
+		record := r.auditor.Record(domain.AuditRecord{
+			ExecutionID: exe.ID,
+			Actor:       exe.Actor,
+			Role:        exe.Role,
+			Action:      "tool." + approval.Tool,
+			Target:      exe.Target,
+			Allowed:     true,
+			Reason:      "approved by task approval; handler error",
+			Parameters:  exe.Parameters,
+		})
+		_ = r.executions.Update(exe.ID, func(e *domain.Execution) { e.AuditID = record.ID })
+		return err
+	}
+	record := r.auditor.Record(domain.AuditRecord{
+		ExecutionID: exe.ID,
+		Actor:       exe.Actor,
+		Role:        exe.Role,
+		Action:      "tool." + approval.Tool,
+		Target:      exe.Target,
+		Allowed:     true,
+		Reason:      "approved by task approval",
+		Parameters:  exe.Parameters,
+	})
+	_ = r.executions.Update(exe.ID, func(e *domain.Execution) {
+		e.Status = "completed"
+		e.Reason = "approved by task approval"
+		e.Result = output
+		e.AuditID = record.ID
+	})
+	return nil
 }
 
 // SubmitApplication records a tool access application and returns it.
@@ -305,6 +398,7 @@ func (r *Registry) SubmitApplication(req domain.ToolApplicationRequest, actor st
 		Status:      status,
 		Decision:    decision,
 		DurationHrs: duration,
+		Parameters:  req.Parameters,
 		CreatedAt:   time.Now().UTC(),
 	}
 	r.appStore = append(r.appStore, app)
@@ -335,9 +429,32 @@ func (r *Registry) decideApplication(id string, status domain.ApplicationStatus,
 	return domain.ToolApplication{}, fmt.Errorf("%w: %s", ErrApplicationNotFound, id)
 }
 
-// ApproveApplication approves a tool access application.
+// ApproveApplication approves a tool application. If the application contains
+// parameters.toolDefinition, the approved tool is registered into the runtime registry.
 func (r *Registry) ApproveApplication(id string) (domain.ToolApplication, error) {
-	return r.decideApplication(id, domain.ApplicationApproved, "approved by admin")
+	application, err := r.decideApplication(id, domain.ApplicationApproved, "approved by admin")
+	if err != nil {
+		return application, err
+	}
+	if raw, ok := application.Parameters["toolDefinition"]; ok && raw != nil {
+		buf, err := json.Marshal(raw)
+		if err != nil {
+			return application, err
+		}
+		var tool domain.Tool
+		if err := json.Unmarshal(buf, &tool); err != nil {
+			return application, err
+		}
+		if strings.TrimSpace(tool.Name) == "" {
+			tool.Name = application.Tool
+		}
+		if _, exists := r.Get(tool.Name); !exists {
+			if _, err := r.CreateTool(tool); err != nil {
+				return application, err
+			}
+		}
+	}
+	return application, nil
 }
 
 // RejectApplication rejects a tool access application.

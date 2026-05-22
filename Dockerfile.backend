@@ -6,7 +6,7 @@ ARG BACKEND_BINARY_NAME=darwin-ops-mcp-linux-${TARGETARCH}
 ARG BACKEND_BINARY_URL=${BACKEND_BINARY_BASE_URL}/${BACKEND_BINARY_NAME}
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends ca-certificates curl openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \

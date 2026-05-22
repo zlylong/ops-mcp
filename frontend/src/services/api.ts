@@ -88,6 +88,16 @@ async function mockRequest<T>(path: string, init?: RequestInit): Promise<T> {
     if (!approval) throw new ApiError(404, { error: 'approval not found' });
     approval.status = path.endsWith('/approve') ? 'approved' : 'rejected';
     approval.decidedAt = new Date().toISOString();
+    const execution = mockExecutions.find((item) => item.id === approval.executionId);
+    if (execution) {
+      execution.status = approval.status === 'approved' ? 'completed' : 'rejected';
+      execution.reason = approval.status === 'approved' ? 'approved by task approval' : 'rejected by task approval';
+      if (approval.status === 'approved') {
+        execution.result = mockToolData(execution.tool, execution.parameters ?? {});
+        execution.auditId = execution.auditId || `mock-aud-${Date.now()}`;
+        mockAudit.unshift({ id: execution.auditId, executionId: execution.id, at: new Date().toISOString(), actor: execution.actor, role: execution.role, action: `tool.${execution.tool}`, target: execution.target, allowed: true, reason: 'approved by task approval', parameters: execution.parameters });
+      }
+    }
     return approval as T;
   }
   if (path === '/api/v1/applications' && (!init?.method || init.method === 'GET')) return mockApplications as T;
