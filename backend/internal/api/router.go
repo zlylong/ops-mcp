@@ -34,7 +34,7 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 	r.GET("/healthz", s.health)
 
 	protected := r.Group("")
-	protected.Use(authRequired(cfg.APIToken))
+	protected.Use(authRequired(cfg.APIToken, registry))
 	protected.GET("/mcp", s.mcp)
 	protected.POST("/mcp", s.mcp)
 
@@ -53,6 +53,10 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 
 	v1 := protected.Group("/api/v1")
 	v1.GET("/dashboard/summary", s.dashboardSummary)
+	v1.GET("/agent-keys", s.listAgentAPIKeys)
+	v1.POST("/agent-keys", s.createAgentAPIKey)
+	v1.DELETE("/agent-keys/:id", s.revokeAgentAPIKey)
+	v1.POST("/agent-keys/:id/revoke", s.revokeAgentAPIKey)
 	v1.GET("/tools", s.tools)
 	v1.POST("/tools", s.createTool)
 	v1.GET("/tools/:name", s.toolDetail)
@@ -188,7 +192,7 @@ func cors() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Trace-ID")
+		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Trace-ID,X-Actor")
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return

@@ -23,6 +23,136 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/v1/agent-keys": {
+            "get": {
+                "description": "Lists API key metadata. Plaintext secrets and hashes are never returned.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-keys"
+                ],
+                "summary": "List Agent API Keys",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Issues a bearer token for an AI agent. Requires the master API token when authentication is enabled.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-keys"
+                ],
+                "summary": "Create Agent API Key",
+                "parameters": [
+                    {
+                        "description": "Agent API key issuance request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/agent-keys/{id}/revoke": {
+            "post": {
+                "description": "Revokes an agent API key by ID. Revoked keys can no longer authenticate.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-keys"
+                ],
+                "summary": "Revoke Agent API Key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Agent API key ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/applications": {
             "get": {
                 "description": "Returns all tool access applications in creation order (newest last).",
@@ -113,7 +243,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.ToolApplication"
+                            "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ToolApplication"
                         }
                     },
                     "404": {
@@ -151,7 +281,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.ToolApplication"
+                            "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ToolApplication"
                         }
                     },
                     "404": {
@@ -182,7 +312,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/domain.Approval"
+                                "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Approval"
                             }
                         }
                     }
@@ -212,7 +342,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Approval"
+                            "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Approval"
                         }
                     },
                     "404": {
@@ -250,7 +380,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Approval"
+                            "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Approval"
                         }
                     },
                     "404": {
@@ -281,7 +411,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/domain.AuditRecord"
+                                "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.AuditRecord"
                             }
                         }
                     }
@@ -325,7 +455,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/domain.Execution"
+                                "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Execution"
                             }
                         }
                     }
@@ -355,7 +485,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Execution"
+                            "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Execution"
                         }
                     },
                     "404": {
@@ -386,7 +516,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/domain.Tool"
+                                "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Tool"
                             }
                         }
                     }
@@ -467,7 +597,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Tool"
+                            "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Tool"
                         }
                     },
                     "404": {
@@ -668,7 +798,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "domain.ApplicationStatus": {
+        "github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ApplicationStatus": {
             "type": "string",
             "enum": [
                 "pending",
@@ -681,7 +811,7 @@ const docTemplate = `{
                 "ApplicationRejected"
             ]
         },
-        "domain.Approval": {
+        "github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Approval": {
             "type": "object",
             "properties": {
                 "actor": {
@@ -703,7 +833,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "$ref": "#/definitions/domain.ApprovalStatus"
+                    "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ApprovalStatus"
                 },
                 "target": {
                     "type": "string"
@@ -713,7 +843,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.ApprovalStatus": {
+        "github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ApprovalStatus": {
             "type": "string",
             "enum": [
                 "pending",
@@ -726,7 +856,7 @@ const docTemplate = `{
                 "ApprovalRejected"
             ]
         },
-        "domain.AuditRecord": {
+        "github_com_zlylong_darwin-ops-mcp_backend_internal_domain.AuditRecord": {
             "type": "object",
             "properties": {
                 "action": {
@@ -755,7 +885,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "role": {
-                    "$ref": "#/definitions/domain.Role"
+                    "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Role"
                 },
                 "target": {
                     "type": "string"
@@ -765,7 +895,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.Execution": {
+        "github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Execution": {
             "type": "object",
             "properties": {
                 "actor": {
@@ -792,7 +922,7 @@ const docTemplate = `{
                     "additionalProperties": {}
                 },
                 "role": {
-                    "$ref": "#/definitions/domain.Role"
+                    "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Role"
                 },
                 "status": {
                     "type": "string"
@@ -805,7 +935,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.ParamSchema": {
+        "github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ParamSchema": {
             "type": "object",
             "properties": {
                 "default": {
@@ -825,7 +955,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.RiskLevel": {
+        "github_com_zlylong_darwin-ops-mcp_backend_internal_domain.RiskLevel": {
             "type": "string",
             "enum": [
                 "low",
@@ -840,7 +970,7 @@ const docTemplate = `{
                 "RiskCritical"
             ]
         },
-        "domain.Role": {
+        "github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Role": {
             "type": "string",
             "enum": [
                 "viewer",
@@ -853,7 +983,7 @@ const docTemplate = `{
                 "RoleAdmin"
             ]
         },
-        "domain.Tool": {
+        "github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Tool": {
             "type": "object",
             "properties": {
                 "category": {
@@ -865,7 +995,7 @@ const docTemplate = `{
                 "inputSchema": {
                     "type": "object",
                     "additionalProperties": {
-                        "$ref": "#/definitions/domain.ParamSchema"
+                        "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ParamSchema"
                     }
                 },
                 "name": {
@@ -878,11 +1008,11 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "risk": {
-                    "$ref": "#/definitions/domain.RiskLevel"
+                    "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.RiskLevel"
                 }
             }
         },
-        "domain.ToolApplication": {
+        "github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ToolApplication": {
             "type": "object",
             "properties": {
                 "actor": {
@@ -903,17 +1033,21 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "parameters": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
                 "reason": {
                     "type": "string"
                 },
                 "risk": {
-                    "$ref": "#/definitions/domain.RiskLevel"
+                    "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.RiskLevel"
                 },
                 "role": {
-                    "$ref": "#/definitions/domain.Role"
+                    "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Role"
                 },
                 "status": {
-                    "$ref": "#/definitions/domain.ApplicationStatus"
+                    "$ref": "#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ApplicationStatus"
                 },
                 "tool": {
                     "type": "string"

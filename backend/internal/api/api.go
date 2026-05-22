@@ -128,6 +128,9 @@ func (s *Server) executeTool(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
 		return
 	}
+	if req.Actor == "" {
+		req.Actor = authenticatedActor(c)
+	}
 	result, status, err := s.registry.Execute(c.Request.Context(), c.Param("name"), domainRequest(req))
 	if err != nil {
 		c.JSON(status, gin.H{"error": result.Message, "executionId": result.ExecutionID, "auditId": result.AuditID, "approvalId": result.ApprovalID})
@@ -177,6 +180,9 @@ func (s *Server) submitApplication(c *gin.Context) {
 		return
 	}
 	actor := c.GetHeader("X-Actor")
+	if actor == "" {
+		actor = authenticatedActor(c)
+	}
 	if actor == "" {
 		actor = "anonymous"
 	}

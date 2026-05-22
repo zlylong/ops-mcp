@@ -1,6 +1,6 @@
 basePath: /
 definitions:
-  domain.ApplicationStatus:
+  github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ApplicationStatus:
     enum:
     - pending
     - approved
@@ -10,7 +10,7 @@ definitions:
     - ApplicationPending
     - ApplicationApproved
     - ApplicationRejected
-  domain.Approval:
+  github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Approval:
     properties:
       actor:
         type: string
@@ -25,13 +25,13 @@ definitions:
       reason:
         type: string
       status:
-        $ref: '#/definitions/domain.ApprovalStatus'
+        $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ApprovalStatus'
       target:
         type: string
       tool:
         type: string
     type: object
-  domain.ApprovalStatus:
+  github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ApprovalStatus:
     enum:
     - pending
     - approved
@@ -41,7 +41,7 @@ definitions:
     - ApprovalPending
     - ApprovalApproved
     - ApprovalRejected
-  domain.AuditRecord:
+  github_com_zlylong_darwin-ops-mcp_backend_internal_domain.AuditRecord:
     properties:
       action:
         type: string
@@ -61,13 +61,13 @@ definitions:
       reason:
         type: string
       role:
-        $ref: '#/definitions/domain.Role'
+        $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Role'
       target:
         type: string
       traceId:
         type: string
     type: object
-  domain.Execution:
+  github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Execution:
     properties:
       actor:
         type: string
@@ -86,7 +86,7 @@ definitions:
         additionalProperties: {}
         type: object
       role:
-        $ref: '#/definitions/domain.Role'
+        $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Role'
       status:
         type: string
       target:
@@ -94,7 +94,7 @@ definitions:
       tool:
         type: string
     type: object
-  domain.ParamSchema:
+  github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ParamSchema:
     properties:
       default:
         description: optional default value
@@ -108,7 +108,7 @@ definitions:
         description: '"string" | "number" | "boolean"'
         type: string
     type: object
-  domain.RiskLevel:
+  github_com_zlylong_darwin-ops-mcp_backend_internal_domain.RiskLevel:
     enum:
     - low
     - medium
@@ -120,7 +120,7 @@ definitions:
     - RiskMedium
     - RiskHigh
     - RiskCritical
-  domain.Role:
+  github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Role:
     enum:
     - viewer
     - operator
@@ -130,7 +130,7 @@ definitions:
     - RoleViewer
     - RoleOperator
     - RoleAdmin
-  domain.Tool:
+  github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Tool:
     properties:
       category:
         type: string
@@ -138,7 +138,7 @@ definitions:
         type: string
       inputSchema:
         additionalProperties:
-          $ref: '#/definitions/domain.ParamSchema'
+          $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ParamSchema'
         type: object
       name:
         type: string
@@ -147,9 +147,9 @@ definitions:
       requiresApproval:
         type: boolean
       risk:
-        $ref: '#/definitions/domain.RiskLevel'
+        $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.RiskLevel'
     type: object
-  domain.ToolApplication:
+  github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ToolApplication:
     properties:
       actor:
         type: string
@@ -163,14 +163,17 @@ definitions:
         type: integer
       id:
         type: string
+      parameters:
+        additionalProperties: {}
+        type: object
       reason:
         type: string
       risk:
-        $ref: '#/definitions/domain.RiskLevel'
+        $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.RiskLevel'
       role:
-        $ref: '#/definitions/domain.Role'
+        $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Role'
       status:
-        $ref: '#/definitions/domain.ApplicationStatus'
+        $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ApplicationStatus'
       tool:
         type: string
     type: object
@@ -189,6 +192,94 @@ info:
   title: Darwin Ops MCP API
   version: "1.0"
 paths:
+  /api/v1/agent-keys:
+    get:
+      description: Lists API key metadata. Plaintext secrets and hashes are never
+        returned.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List Agent API Keys
+      tags:
+      - agent-keys
+    post:
+      consumes:
+      - application/json
+      description: Issues a bearer token for an AI agent. Requires the master API
+        token when authentication is enabled.
+      parameters:
+      - description: Agent API key issuance request
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create Agent API Key
+      tags:
+      - agent-keys
+  /api/v1/agent-keys/{id}/revoke:
+    post:
+      description: Revokes an agent API key by ID. Revoked keys can no longer authenticate.
+      parameters:
+      - description: Agent API key ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Revoke Agent API Key
+      tags:
+      - agent-keys
   /api/v1/applications:
     get:
       description: Returns all tool access applications in creation order (newest
@@ -252,7 +343,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.ToolApplication'
+            $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ToolApplication'
         "404":
           description: Not Found
           schema:
@@ -278,7 +369,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.ToolApplication'
+            $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.ToolApplication'
         "404":
           description: Not Found
           schema:
@@ -298,7 +389,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/domain.Approval'
+              $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Approval'
             type: array
       summary: List Execution Approvals
       tags:
@@ -318,7 +409,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Approval'
+            $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Approval'
         "404":
           description: Not Found
           schema:
@@ -343,7 +434,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Approval'
+            $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Approval'
         "404":
           description: Not Found
           schema:
@@ -363,7 +454,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/domain.AuditRecord'
+              $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.AuditRecord'
             type: array
       summary: List Audit Records
       tags:
@@ -393,7 +484,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/domain.Execution'
+              $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Execution'
             type: array
       summary: List Executions
       tags:
@@ -413,7 +504,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Execution'
+            $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Execution'
         "404":
           description: Not Found
           schema:
@@ -433,7 +524,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/domain.Tool'
+              $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Tool'
             type: array
       summary: List Tools
       tags:
@@ -507,7 +598,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Tool'
+            $ref: '#/definitions/github_com_zlylong_darwin-ops-mcp_backend_internal_domain.Tool'
         "404":
           description: Not Found
           schema:

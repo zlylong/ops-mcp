@@ -2,12 +2,17 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/audit"
@@ -21,9 +26,15 @@ var (
 	ErrToolNotFound        = errors.New("tool not found")
 	ErrAlreadyExists       = errors.New("tool already exists")
 	ErrApplicationNotFound = errors.New("application not found")
+	ErrAgentAPIKeyNotFound = errors.New("agent api key not found")
 )
 
 type Handler func(context.Context, map[string]any) (map[string]any, error)
+
+type agentAPIKeyRecord struct {
+	domain.AgentAPIKey
+	SecretHash string
+}
 
 type registeredTool struct {
 	tool    domain.Tool
@@ -37,6 +48,8 @@ type Registry struct {
 	executions  *storage.ExecutionStore
 	approvals   *storage.ApprovalStore
 	appStore    []domain.ToolApplication
+	keyMu       sync.RWMutex
+	agentKeys   []agentAPIKeyRecord
 	environment domain.Environment
 }
 
@@ -460,4 +473,127 @@ func (r *Registry) ApproveApplication(id string) (domain.ToolApplication, error)
 // RejectApplication rejects a tool access application.
 func (r *Registry) RejectApplication(id string) (domain.ToolApplication, error) {
 	return r.decideApplication(id, domain.ApplicationRejected, "rejected by admin")
+}
+
+// CreateAgentAPIKey issues a new bearer token for an agent. The returned Secret is shown once.
+func (r *Registry) CreateAgentAPIKey(req domain.AgentAPIKeyCreateRequest) (domain.AgentAPIKeyCreateResponse, error) {
+	name := strings.TrimSpace(req.Name)
+	actor := strings.TrimSpace(req.Actor)
+	if name == "" {
+		return domain.AgentAPIKeyCreateResponse{}, errors.New("name is required")
+	}
+	if actor == "" {
+		return domain.AgentAPIKeyCreateResponse{}, errors.New("actor is required")
+	}
+	switch req.Role {
+	case domain.RoleViewer, domain.RoleOperator, domain.RoleAdmin:
+		// valid
+	default:
+		return domain.AgentAPIKeyCreateResponse{}, errors.New("role must be viewer, operator, or admin")
+	}
+	secret, err := generateAgentAPISecret()
+	if err != nil {
+		return domain.AgentAPIKeyCreateResponse{}, err
+	}
+	now := time.Now().UTC()
+	var expiresAt *time.Time
+	if req.ExpiresInHrs > 0 {
+		exp := now.Add(time.Duration(req.ExpiresInHrs) * time.Hour)
+		expiresAt = &exp
+	}
+	metadata := domain.AgentAPIKey{
+		ID:        "key-" + strconv.FormatInt(now.UnixNano(), 36),
+		Name:      name,
+		Actor:     actor,
+		Role:      req.Role,
+		Reason:    strings.TrimSpace(req.Reason),
+		Scopes:    append([]string(nil), req.Scopes...),
+		KeyPrefix: keyPrefix(secret),
+		Status:    "active",
+		CreatedAt: now,
+		ExpiresAt: expiresAt,
+	}
+	record := agentAPIKeyRecord{AgentAPIKey: metadata, SecretHash: hashAgentAPISecret(secret)}
+	r.keyMu.Lock()
+	r.agentKeys = append([]agentAPIKeyRecord{record}, r.agentKeys...)
+	r.keyMu.Unlock()
+	return domain.AgentAPIKeyCreateResponse{AgentAPIKey: metadata, Secret: secret}, nil
+}
+
+// AgentAPIKeys lists API key metadata without plaintext secrets or hashes.
+func (r *Registry) AgentAPIKeys() []domain.AgentAPIKey {
+	r.keyMu.RLock()
+	defer r.keyMu.RUnlock()
+	out := make([]domain.AgentAPIKey, 0, len(r.agentKeys))
+	for _, item := range r.agentKeys {
+		out = append(out, item.AgentAPIKey)
+	}
+	return out
+}
+
+// RevokeAgentAPIKey disables a key. Revocation is idempotent for existing keys.
+func (r *Registry) RevokeAgentAPIKey(id string) (domain.AgentAPIKey, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return domain.AgentAPIKey{}, errors.New("key id is required")
+	}
+	r.keyMu.Lock()
+	defer r.keyMu.Unlock()
+	for i := range r.agentKeys {
+		if r.agentKeys[i].ID == id {
+			now := time.Now().UTC()
+			r.agentKeys[i].Status = "revoked"
+			r.agentKeys[i].RevokedAt = &now
+			return r.agentKeys[i].AgentAPIKey, nil
+		}
+	}
+	return domain.AgentAPIKey{}, ErrAgentAPIKeyNotFound
+}
+
+// AuthenticateAgentAPIKey validates a bearer token against active agent keys and updates last-used time.
+func (r *Registry) AuthenticateAgentAPIKey(secret string) (domain.AgentAPIKey, bool) {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		return domain.AgentAPIKey{}, false
+	}
+	hash := hashAgentAPISecret(secret)
+	now := time.Now().UTC()
+	r.keyMu.Lock()
+	defer r.keyMu.Unlock()
+	for i := range r.agentKeys {
+		item := &r.agentKeys[i]
+		if item.SecretHash != hash {
+			continue
+		}
+		if item.Status != "active" || item.RevokedAt != nil {
+			return domain.AgentAPIKey{}, false
+		}
+		if item.ExpiresAt != nil && now.After(*item.ExpiresAt) {
+			item.Status = "expired"
+			return domain.AgentAPIKey{}, false
+		}
+		item.LastUsedAt = &now
+		return item.AgentAPIKey, true
+	}
+	return domain.AgentAPIKey{}, false
+}
+
+func generateAgentAPISecret() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return "domcp_" + base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func hashAgentAPISecret(secret string) string {
+	sum := sha256.Sum256([]byte(secret))
+	return hex.EncodeToString(sum[:])
+}
+
+func keyPrefix(secret string) string {
+	if len(secret) <= 12 {
+		return secret
+	}
+	return secret[:12]
 }

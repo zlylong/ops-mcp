@@ -15,6 +15,7 @@ Use this skill when a Hermes Agent is acting as the dedicated project agent for 
 
 Use this skill when an external AI Agent needs to learn:
 
+- how per-agent API keys are issued, listed, and revoked through `/api/v1/agent-keys`;
 - how to request tool access through `/api/v1/applications`;
 - how to list and call tools through REST `/api/v1/tools/:name/execute`;
 - how to call tools through MCP `/mcp` `tools/list` and `tools/call`;

@@ -27,6 +27,59 @@ Response example:
 }
 ```
 
+## Agent API Keys
+
+`GET /api/v1/agent-keys`
+
+Lists issued Agent API Key metadata. Responses include fields such as `id`, `name`, `actor`, `role`, `scopes`, `keyPrefix`, `status`, `createdAt`, `expiresAt`, `lastUsedAt`, and `revokedAt`; they never include plaintext secrets or hashes.
+
+`POST /api/v1/agent-keys`
+
+Issues a new Agent API Key. When `DARWIN_OPS_MCP_API_TOKEN` is enabled, this endpoint must be called with the master token; normal Agent keys cannot create or list other keys.
+
+Request example:
+
+```json
+{
+  "name": "opsagent topic 436",
+  "actor": "opsagent-topic-436",
+  "role": "viewer",
+  "reason": "read-only inspection automation",
+  "scopes": ["tools:execute", "applications:create"],
+  "expiresInHrs": 168
+}
+```
+
+Response example:
+
+```json
+{
+  "id": "key-...",
+  "name": "opsagent topic 436",
+  "actor": "opsagent-topic-436",
+  "role": "viewer",
+  "keyPrefix": "domcp_...",
+  "status": "active",
+  "createdAt": "2026-05-22T10:00:00Z",
+  "expiresAt": "2026-05-29T10:00:00Z",
+  "secret": "domcp_..."
+}
+```
+
+`secret` is returned only once in the create response and must be stored immediately by the caller. The backend stores only a SHA-256 hash and a short prefix. The current implementation uses in-process memory like execution/audit records, so issued keys are lost after backend restart; migrate this to a database table when persistent storage is enabled.
+
+`POST /api/v1/agent-keys/:id/revoke` or `DELETE /api/v1/agent-keys/:id`
+
+Revokes a key. After revocation, the same bearer token returns `401 Unauthorized`.
+
+Agent keys are used like the original bearer token:
+
+```http
+Authorization: Bearer domcp_...
+```
+
+If a request body omits `actor`, the backend falls back to the key-bound `actor` as the execution identity. Agents should still pass a stable `actor` and `X-Trace-ID` explicitly for auditability.
+
 ## Tool Registry
 
 `GET /api/v1/tools`

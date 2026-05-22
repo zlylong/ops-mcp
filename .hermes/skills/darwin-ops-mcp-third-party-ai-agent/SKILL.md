@@ -68,6 +68,40 @@ When `DARWIN_OPS_MCP_API_TOKEN` is configured, pass:
 Authorization: Bearer <token>
 ```
 
+### Agent API Key Issuance
+
+For production-like integrations, prefer per-agent API keys over sharing the master `DARWIN_OPS_MCP_API_TOKEN`. A master-token caller can issue and manage keys through:
+
+```text
+GET    /api/v1/agent-keys
+POST   /api/v1/agent-keys
+POST   /api/v1/agent-keys/:id/revoke
+DELETE /api/v1/agent-keys/:id
+```
+
+Create request:
+
+```json
+{
+  "name": "external agent name",
+  "actor": "external-agent-01",
+  "role": "viewer",
+  "reason": "read-only inspection automation",
+  "scopes": ["tools:execute", "applications:create"],
+  "expiresInHrs": 168
+}
+```
+
+The create response includes `secret` exactly once. Store it immediately and never commit it to docs, Git, prompts, or logs. Later list responses expose only metadata such as `keyPrefix`, `status`, timestamps, role, actor, and scopes. Current key records are in-memory, so issued keys are invalidated by backend restart until a persistent store is added.
+
+Use the issued key as a normal bearer token:
+
+```http
+Authorization: Bearer domcp_...
+```
+
+If the request body omits `actor`, the backend falls back to the key-bound actor. Still pass explicit `actor` / `X-Actor` and `X-Trace-ID` whenever possible so audit logs are clear. A normal agent key can call protected API/MCP endpoints but cannot create, list, or revoke keys; key management requires the master token.
+
 All external agents should also set identity and trace fields:
 
 ```http

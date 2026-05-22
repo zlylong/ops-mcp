@@ -205,3 +205,36 @@ type ToolApplication struct {
 	CreatedAt   time.Time         `json:"createdAt"`
 	DecidedAt   *time.Time        `json:"decidedAt,omitempty"`
 }
+
+// AgentAPIKeyCreateRequest describes a one-time API key issuance request for an AI agent.
+type AgentAPIKeyCreateRequest struct {
+	Name         string   `json:"name"`
+	Actor        string   `json:"actor"`
+	Role         Role     `json:"role"`
+	Reason       string   `json:"reason"`
+	Scopes       []string `json:"scopes,omitempty"`
+	ExpiresInHrs int      `json:"expiresInHrs"` // hours; 0 = non-expiring
+}
+
+// AgentAPIKey is the server-side metadata for an agent API key. It never contains
+// the plaintext secret; the secret is returned only once by AgentAPIKeyCreateResponse.
+type AgentAPIKey struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Actor      string     `json:"actor"`
+	Role       Role       `json:"role"`
+	Reason     string     `json:"reason,omitempty"`
+	Scopes     []string   `json:"scopes,omitempty"`
+	KeyPrefix  string     `json:"keyPrefix"`
+	Status     string     `json:"status"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
+}
+
+// AgentAPIKeyCreateResponse includes the plaintext secret exactly once at issuance time.
+type AgentAPIKeyCreateResponse struct {
+	AgentAPIKey
+	Secret string `json:"secret"`
+}

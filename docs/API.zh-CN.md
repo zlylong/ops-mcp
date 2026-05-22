@@ -27,6 +27,59 @@ Base URL：`/api/v1`
 }
 ```
 
+## Agent API 密钥
+
+`GET /api/v1/agent-keys`
+
+列出已颁发的 Agent API Key 元数据。响应只包含 `id`、`name`、`actor`、`role`、`scopes`、`keyPrefix`、`status`、`createdAt`、`expiresAt`、`lastUsedAt`、`revokedAt` 等字段，**不会返回明文 secret 或 hash**。
+
+`POST /api/v1/agent-keys`
+
+颁发新的 Agent API Key。启用 `DARWIN_OPS_MCP_API_TOKEN` 时，该接口必须使用 master token 调用；普通 Agent key 不能继续创建或查看其他 key。
+
+请求示例：
+
+```json
+{
+  "name": "opsagent topic 436",
+  "actor": "opsagent-topic-436",
+  "role": "viewer",
+  "reason": "read-only inspection automation",
+  "scopes": ["tools:execute", "applications:create"],
+  "expiresInHrs": 168
+}
+```
+
+响应示例：
+
+```json
+{
+  "id": "key-...",
+  "name": "opsagent topic 436",
+  "actor": "opsagent-topic-436",
+  "role": "viewer",
+  "keyPrefix": "domcp_...",
+  "status": "active",
+  "createdAt": "2026-05-22T10:00:00Z",
+  "expiresAt": "2026-05-29T10:00:00Z",
+  "secret": "domcp_..."
+}
+```
+
+`secret` 只在创建响应中出现一次；调用方必须立即保存。服务端仅保存 SHA-256 hash 和短前缀。当前实现与 execution/audit 一样使用进程内存存储，后端重启后已颁发 key 会失效；后续接入持久化存储时应迁移为数据库表。
+
+`POST /api/v1/agent-keys/:id/revoke` 或 `DELETE /api/v1/agent-keys/:id`
+
+吊销 key。吊销后再次使用该 bearer token 会返回 `401 Unauthorized`。
+
+Agent key 使用方式与原始 bearer token 相同：
+
+```http
+Authorization: Bearer domcp_...
+```
+
+如果请求体没有显式 `actor`，后端会使用 key 绑定的 `actor` 作为默认执行身份；仍建议 Agent 明确传递稳定 `actor` 与 `X-Trace-ID`，便于审计。
+
 ## Tool Registry
 
 `GET /api/v1/tools`
@@ -135,7 +188,7 @@ Prometheus 工具：
 
 将审批标记为 rejected。
 
-MVP 的审批接口目前只更新审批状态，尚不会自动重放被阻止的执行。
+执行审批接口会更新审批状态；批准后，后端会自动重放对应的 pending execution，并在执行记录与审计记录中写入最终结果。
 
 ## 默认 Linux 工具目录
 
