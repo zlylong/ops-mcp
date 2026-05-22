@@ -56,12 +56,14 @@ jobs:
       - name: Run backend tests
         run: go test ./...
 
-      - name: Build backend binaries
+      - name: Build backend and proxy binaries
         run: |
           mkdir -p bin
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/darwin-ops-mcp-linux-amd64 ./backend/cmd/server
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/darwin-ops-mcp-linux-arm64 ./backend/cmd/server
-          sha256sum bin/darwin-ops-mcp-linux-* > bin/SHA256SUMS
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/darwin-ops-mcp-proxy-linux-amd64 ./backend/cmd/mcp-proxy
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/darwin-ops-mcp-proxy-linux-arm64 ./backend/cmd/mcp-proxy
+          sha256sum bin/darwin-ops-mcp-linux-* bin/darwin-ops-mcp-proxy-linux-* > bin/SHA256SUMS
 
       - name: Upload backend binaries
         uses: actions/upload-artifact@v4
@@ -70,6 +72,8 @@ jobs:
           path: |
             bin/darwin-ops-mcp-linux-amd64
             bin/darwin-ops-mcp-linux-arm64
+            bin/darwin-ops-mcp-proxy-linux-amd64
+            bin/darwin-ops-mcp-proxy-linux-arm64
             bin/SHA256SUMS
           if-no-files-found: error
 
@@ -109,6 +113,8 @@ jobs:
           gh release upload "${RELEASE_TAG}" \
             bin/darwin-ops-mcp-linux-amd64 \
             bin/darwin-ops-mcp-linux-arm64 \
+            bin/darwin-ops-mcp-proxy-linux-amd64 \
+            bin/darwin-ops-mcp-proxy-linux-arm64 \
             bin/SHA256SUMS \
             --clobber
 

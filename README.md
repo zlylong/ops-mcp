@@ -202,7 +202,7 @@ Frontend environment variables:
 
 - [Tool Center User Guide](docs/TOOL_CENTER.md): beginner-friendly guide for searching, viewing, executing, creating, editing, deleting, approving, and auditing tools.
 - [API Documentation](docs/API.md): HTTP API and default tool catalog.
-- [MCP Client Integration](docs/MCP_CLIENT.md): connect external AI agents through MCP HTTP or OpenAPI.
+- [MCP Client Integration](docs/MCP_CLIENT.md): connect external AI agents through MCP HTTP, stdio proxy, or OpenAPI.
 - [Read-only Local Linux Adapter](docs/LOCAL_LINUX_ADAPTER.md): enable opt-in real Linux host collection and verify its safety boundary.
 - [Testing Guide](docs/TESTING.md): backend test strategy and commands.
 - [Security Guide](docs/SECURITY.md): safety guarantees, masking, and policy boundaries.

@@ -202,7 +202,7 @@ go run ./backend/cmd/server --config config.example.json
 
 - [工具中心使用文档](docs/TOOL_CENTER.zh-CN.md)：面向新手，详细说明工具搜索、查看、执行、新增、编辑、删除、审批和审计逻辑。
 - [API 文档](docs/API.zh-CN.md)：HTTP API 与默认工具目录。
-- [MCP 客户端接入](docs/MCP_CLIENT.zh-CN.md)：通过 MCP HTTP 或 OpenAPI 接入外部 AI Agent。
+- [MCP 客户端接入](docs/MCP_CLIENT.zh-CN.md)：通过 MCP HTTP、stdio proxy 或 OpenAPI 接入外部 AI Agent。
 - [只读本地 Linux Adapter](docs/LOCAL_LINUX_ADAPTER.zh-CN.md)：启用可选真实 Linux 主机采集并验证安全边界。
 - [测试指南](docs/TESTING.zh-CN.md)：后端测试策略与命令。
 - [安全指南](docs/SECURITY.zh-CN.md)：安全保证、脱敏和策略边界。

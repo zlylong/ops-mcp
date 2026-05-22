@@ -23,7 +23,9 @@ lint:
 	cd frontend && npm install && npm run lint
 
 build:
+	mkdir -p bin
 	go build -o bin/darwin-ops-mcp ./backend/cmd/server
+	go build -o bin/darwin-ops-mcp-proxy ./backend/cmd/mcp-proxy
 	cd frontend && npm install && npm run build
 
 docker-up:
