@@ -19,6 +19,8 @@ hermes -p darwinopsmcp   -s darwin-ops-mcp-project-agent,darwin-ops-mcp-third-pa
 ## Agent 固定上下文
 
 - Hermes profile：`darwinopsmcp`
+- 专用启动器：`darwinopsmcp-agent`
+- 模型锁定：OpenAI Codex `gpt-5.5`，不使用本地/custom/fallback 模型
 - 开发机：`192.168.20.166`
 - 工作目录：`/root/ops-mcp`
 - Git remote：`git@github.com:zlylong/darwin-ops-mcp.git`

@@ -16,6 +16,9 @@ Use it whenever the user asks to work on `darwin-ops-mcp`, `ops-mcp`, the approv
 
 ## Non-negotiable project context
 
+- Dedicated Hermes profile: `darwinopsmcp`.
+- Dedicated launcher: `darwinopsmcp-agent`.
+- Model lock: use OpenAI Codex `gpt-5.5` only; do not silently switch to local/custom/fallback models for this project agent.
 - Real development host: `192.168.20.166`.
 - Real project workspace: `/root/ops-mcp`.
 - Real GitHub repository: `git@github.com:zlylong/darwin-ops-mcp.git` / `https://github.com/zlylong/darwin-ops-mcp`.
