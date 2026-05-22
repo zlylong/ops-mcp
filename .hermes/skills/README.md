@@ -2,6 +2,13 @@
 
 This directory contains AI-readable skills for `darwin-ops-mcp`.
 
+
+## Dedicated Project Agent Skill
+
+- `darwin-ops-mcp-project-agent/SKILL.md`
+
+Use this skill when a Hermes Agent is acting as the dedicated project agent for this repository. It fixes the development host/workspace, source-grounding rules, verification commands, documentation expectations, and commit/push workflow.
+
 ## Primary Skill for Third-Party AI Agents
 
 - `darwin-ops-mcp-third-party-ai-agent/SKILL.md`
@@ -21,5 +28,6 @@ Use this skill when an external AI Agent needs to learn:
 Third-party AI systems should load the full SKILL.md before attempting tool calls:
 
 ```text
+.hermes/skills/darwin-ops-mcp-project-agent/SKILL.md
 .hermes/skills/darwin-ops-mcp-third-party-ai-agent/SKILL.md
 ```
