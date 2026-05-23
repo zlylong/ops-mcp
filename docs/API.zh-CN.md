@@ -205,3 +205,124 @@ Prometheus 工具：
 - `linux.ping`：按指定 `host` 和可选 `count` 执行连通性检查。
 - `linux.dns_lookup`：按指定 `host` 查看 DNS 解析结果。
 
+
+
+## 用户管理
+
+> 需启用 `DARWIN_OPS_MCP_API_TOKEN` 或通过已登录的 User Token 调用。以下说明基于 master token 场景。
+
+### 登录
+
+`POST /api/v1/users/login`
+
+用户名密码登录，返回 JWT token（格式：`user:<userID>`）和用户信息。
+
+请求示例：
+
+```json
+{
+  "username": "admin",
+  "password": "admin1234"
+}
+```
+
+响应示例：
+
+```json
+{
+  "token": "user:usr-1779513806634305005",
+  "user": {
+    "id": "usr-1779513806634305005",
+    "username": "admin",
+    "nickname": "超级管理员",
+    "role": "admin",
+    "status": "active",
+    "createdAt": "2026-05-23T05:23:26Z",
+    "updatedAt": "2026-05-23T05:23:29Z"
+  },
+  "expiresIn": 604800
+}
+```
+
+错误：`401 invalid username or password`
+
+### 获取当前用户信息
+
+`GET /api/v1/users/me`
+
+返回当前登录用户信息。Master token 场景下返回第一个 admin 用户。
+
+### 更新个人信息
+
+`PUT /api/v1/users/me`
+
+更新当前用户的昵称和邮箱。
+
+请求示例：
+
+```json
+{
+  "nickname": "新昵称",
+  "email": "user@example.com"
+}
+```
+
+### 修改密码
+
+`PUT /api/v1/users/me/password`
+
+修改当前用户密码（需验证旧密码）。
+
+请求示例：
+
+```json
+{
+  "oldPassword": "oldpass",
+  "newPassword": "newpass123"
+}
+```
+
+错误：`403 old password is incorrect`；`400 new password must be at least 8 characters`
+
+### 用户列表（Admin）
+
+`GET /api/v1/users`
+
+列出所有用户（Admin 专属）。
+
+### 创建用户（Admin）
+
+`POST /api/v1/users`
+
+创建新用户账号。
+
+请求示例：
+
+```json
+{
+  "username": "alice",
+  "password": "alice1234",
+  "nickname": "Alice",
+  "role": "viewer"
+}
+```
+
+角色可选：`admin`、`operator`、`viewer`。默认 `viewer`。
+
+### 获取/更新/删除用户（Admin）
+
+`GET /api/v1/users/:id` | `PUT /api/v1/users/:id` | `DELETE /api/v1/users/:id`
+
+### 重置用户密码（Admin）
+
+`PUT /api/v1/users/:id/password`
+
+强制重置指定用户密码。
+
+请求示例：
+
+```json
+{
+  "newPassword": "newpass123"
+}
+```

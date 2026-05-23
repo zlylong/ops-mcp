@@ -205,3 +205,87 @@ The backend registers a common Linux operations tool set in the Tools Center. In
 - `linux.ping`: connectivity check for a requested `host` and optional `count`.
 - `linux.dns_lookup`: DNS resolution result for a requested `host`.
 
+
+
+## User Management
+
+> Requires `DARWIN_OPS_MCP_API_TOKEN` or a valid User Token. Described here for master token usage.
+
+### Login
+
+`POST /api/v1/users/login`
+
+Authenticate with username and password. Returns a Bearer token (`user:<userID>`) and user info.
+
+Example request:
+
+```json
+{
+  "username": "admin",
+  "password": "admin1234"
+}
+```
+
+Example response:
+
+```json
+{
+  "token": "user:usr-1779513806634305005",
+  "user": {
+    "id": "usr-1779513806634305005",
+    "username": "admin",
+    "nickname": "Administrator",
+    "role": "admin",
+    "status": "active",
+    "createdAt": "2026-05-23T05:23:26Z",
+    "updatedAt": "2026-05-23T05:23:29Z"
+  },
+  "expiresIn": 604800
+}
+```
+
+Error: `401 invalid username or password`
+
+### Get Current User
+
+`GET /api/v1/users/me`
+
+Returns the authenticated user's profile. With master token, returns the first admin user.
+
+### Update Profile
+
+`PUT /api/v1/users/me`
+
+Updates the authenticated user's nickname and email.
+
+### Change Password
+
+`PUT /api/v1/users/me/password`
+
+Changes the authenticated user's password (requires old password verification).
+
+Errors: `403 old password is incorrect`; `400 new password must be at least 8 characters`
+
+### List Users (Admin)
+
+`GET /api/v1/users`
+
+Lists all users. Admin role required.
+
+### Create User (Admin)
+
+`POST /api/v1/users`
+
+Creates a new user account.
+
+Roles: `admin`, `operator`, `viewer`. Default: `viewer`.
+
+### Get/Update/Delete User (Admin)
+
+`GET /api/v1/users/:id` | `PUT /api/v1/users/:id` | `DELETE /api/v1/users/:id`
+
+### Reset User Password (Admin)
+
+`PUT /api/v1/users/:id/password`
+
+Forcibly resets a user's password.

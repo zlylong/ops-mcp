@@ -62,7 +62,17 @@ When the task involves third-party AI Agent access to tools, load/use the repo s
 
 - `.hermes/skills/darwin-ops-mcp-third-party-ai-agent/SKILL.md`
 
-Current key semantics to preserve unless source code changes:
+Updated key semantics (as of 2026-05-23):
+
+- New user management APIs: `POST /api/v1/users/login`, `GET /api/v1/users/me`, `PUT /api/v1/users/me`, `PUT /api/v1/users/me/password`, `GET /api/v1/users`, `POST /api/v1/users`, `GET/PUT/DELETE /api/v1/users/:id`, `PUT /api/v1/users/:id/password`.
+- User roles: `admin`, `operator`, `viewer`.
+- User token format: `Bearer user:<userID>` (not JWT, a simple token).
+- Default admin seeded on first start: username `admin`, password `admin1234`.
+- Passwords stored as bcrypt hashes (never plaintext).
+- Master token auth falls back to first admin user for user-specific endpoints.
+- Frontend pages: `/login` (login form), `/profile` (view/edit self, change password), `/users` (admin user CRUD).
+
+## Original key semantics to preserve unless source code changes:
 
 - Protected REST APIs require the configured API token; never print the token.
 - Trace header: `X-Trace-ID`.
