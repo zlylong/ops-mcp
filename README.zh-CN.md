@@ -67,7 +67,13 @@ http://localhost:5173
 
 侧边栏提供 **Agent Key 管理** 页面。启用 `DARWIN_OPS_MCP_API_TOKEN` 后，在该页面填写 Master Token 即可查看、颁发和吊销每个 Agent 独立的 Bearer Token。创建响应中的 Secret 只显示一次，请立即复制并妥善保存，禁止把完整密钥写入文档或日志。
 
-当前 MVP 没有密码登录。执行工具时使用内置 mock 身份：
+已支持用户登录和用户管理。侧边栏提供：
+- **个人中心**：查看/修改个人信息、修改密码
+- **用户管理**（Admin）：用户列表、新建、编辑、删除、密码重置
+
+默认管理员账号：`admin` / `admin1234`。登录入口：`/login`。
+
+执行工具时若无用户身份，使用内置 mock 身份：
 
 - Actor：`mock.user`
 - Role：`viewer`
