@@ -16,3 +16,22 @@ export type AgentAPIKey = { id: string; name: string; actor: string; role: Role;
 export type AgentAPIKeyCreateRequest = { name: string; actor: string; role: Role; reason: string; scopes?: string[]; expiresInHrs?: number };
 export type AgentAPIKeyCreateResponse = AgentAPIKey & { secret: string };
 export type FilterState = { q?: string; category?: string; risk?: Risk | 'all'; readOnly?: 'all' | 'true' | 'false'; status?: string; user?: string; tool?: string; environment?: string };
+
+// ── User management ────────────────────────────────────────────────────────────
+export type UserStatus = 'active' | 'inactive' | string;
+export type User = {
+  id: string;
+  username: string;
+  nickname: string;
+  email?: string;
+  role: Role;
+  status: UserStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+export type UserCreateRequest = { username: string; password: string; nickname?: string; email?: string; role: Role };
+export type UserUpdateRequest = { nickname?: string; email?: string; status?: UserStatus; role?: Role };
+export type ChangePasswordRequest = { oldPassword: string; newPassword: string };
+export type ChangePasswordByAdminRequest = { newPassword: string };
+export type LoginRequest = { username: string; password: string };
+export type LoginResponse = { token: string; user: User; expiresIn: number };

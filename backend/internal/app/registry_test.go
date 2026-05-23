@@ -27,7 +27,7 @@ func (m *mockRecorder) Record(record domain.AuditRecord) domain.AuditRecord {
 func (m *mockRecorder) List() []domain.AuditRecord { return nil }
 
 func createTestRegistry() *Registry {
-	return NewRegistry(policy.NewEngine(), audit.NewStore(nil), storage.NewExecutionStore(), storage.NewApprovalStore(), domain.EnvDevelopment)
+	return NewRegistry(policy.NewEngine(), audit.NewStore(nil), storage.NewExecutionStore(), storage.NewApprovalStore(), storage.NewUserStore(), domain.EnvDevelopment)
 }
 
 func TestRegistry_Register(t *testing.T) {
@@ -35,7 +35,7 @@ func TestRegistry_Register(t *testing.T) {
 	recorder := &mockRecorder{}
 	execStore := storage.NewExecutionStore()
 	approvStore := storage.NewApprovalStore()
-	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+	registry := NewRegistry(engine, recorder, execStore, approvStore, storage.NewUserStore(), domain.EnvDevelopment)
 
 	err := registry.Register(domain.Tool{Name: "test.tool", Risk: domain.RiskLow}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
 		return map[string]any{"result": "ok"}, nil
@@ -58,7 +58,7 @@ func TestRegistry_List(t *testing.T) {
 	recorder := &mockRecorder{}
 	execStore := storage.NewExecutionStore()
 	approvStore := storage.NewApprovalStore()
-	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+	registry := NewRegistry(engine, recorder, execStore, approvStore, storage.NewUserStore(), domain.EnvDevelopment)
 
 	registry.Register(domain.Tool{Name: "b.tool", Risk: domain.RiskLow}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
 		return map[string]any{"result": "ok"}, nil
@@ -82,7 +82,7 @@ func TestRegistry_Get(t *testing.T) {
 	recorder := &mockRecorder{}
 	execStore := storage.NewExecutionStore()
 	approvStore := storage.NewApprovalStore()
-	registry := NewRegistry(engine, recorder, execStore, approvStore, domain.EnvDevelopment)
+	registry := NewRegistry(engine, recorder, execStore, approvStore, storage.NewUserStore(), domain.EnvDevelopment)
 
 	registry.Register(domain.Tool{Name: "test.tool", Risk: domain.RiskLow}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
 		return map[string]any{"result": "ok"}, nil

@@ -51,10 +51,11 @@ type Registry struct {
 	keyMu       sync.RWMutex
 	agentKeys   []agentAPIKeyRecord
 	environment domain.Environment
+	users      *storage.UserStore
 }
 
-func NewRegistry(policyEngine *policy.Engine, auditor audit.Recorder, executions *storage.ExecutionStore, approvals *storage.ApprovalStore, env domain.Environment) *Registry {
-	return &Registry{tools: make(map[string]registeredTool), policy: policyEngine, auditor: auditor, executions: executions, approvals: approvals, environment: env}
+func NewRegistry(policyEngine *policy.Engine, auditor audit.Recorder, executions *storage.ExecutionStore, approvals *storage.ApprovalStore, users *storage.UserStore, env domain.Environment) *Registry {
+	return &Registry{tools: make(map[string]registeredTool), policy: policyEngine, auditor: auditor, executions: executions, approvals: approvals, users: users, environment: env}
 }
 
 func (r *Registry) Register(tool domain.Tool, handler Handler) error {
@@ -518,6 +519,12 @@ func (r *Registry) CreateAgentAPIKey(req domain.AgentAPIKeyCreateRequest) (domai
 	r.agentKeys = append([]agentAPIKeyRecord{record}, r.agentKeys...)
 	r.keyMu.Unlock()
 	return domain.AgentAPIKeyCreateResponse{AgentAPIKey: metadata, Secret: secret}, nil
+}
+
+
+// Users returns the user store.
+func (r *Registry) Users() *storage.UserStore {
+	return r.users
 }
 
 // AgentAPIKeys lists API key metadata without plaintext secrets or hashes.

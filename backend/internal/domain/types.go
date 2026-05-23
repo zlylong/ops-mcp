@@ -238,3 +238,42 @@ type AgentAPIKeyCreateResponse struct {
 	AgentAPIKey
 	Secret string `json:"secret"`
 }
+// ── User management ────────────────────────────────────────────────────────────
+// User represents a server-side user account.
+type User struct {
+	ID        string    `json:"id"`
+	Username  string    `json:"username"`
+	Nickname  string    `json:"nickname"`
+	Email     string    `json:"email,omitempty"`
+	Role      Role      `json:"role"`
+	Status    string    `json:"status"` // "active" | "inactive"
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+// UserCreateRequest is used to register a new user account (admin only).
+type UserCreateRequest struct {
+	Username string `json:"username" binding:"required,min=3,max=32"`
+	Password string `json:"password" binding:"required,min=8,max=128"`
+	Nickname string `json:"nickname"`
+	Email    string `json:"email"`
+	Role     Role   `json:"role"`
+}
+
+// UserUpdateRequest is used to update an existing user (admin or self).
+type UserUpdateRequest struct {
+	Nickname string `json:"nickname"`
+	Email    string `json:"email"`
+	Status   string `json:"status,omitempty"` // "active" | "inactive"; admin only
+	Role     Role   `json:"role,omitempty"`   // admin only
+}
+
+// ChangePasswordRequest is used to change a user's own password.
+type ChangePasswordRequest struct {
+	OldPassword string `json:"oldPassword" binding:"required"`
+	NewPassword string `json:"newPassword" binding:"required,min=8,max=128"`
+}
+
+// ChangePasswordByAdminRequest is used by an admin to reset a user's password.
+type ChangePasswordByAdminRequest struct {
+	NewPassword string `json:"newPassword" binding:"required,min=8,max=128"`
+}

@@ -25,6 +25,7 @@ func createTestRegistryForApp() *app.Registry {
 		&mockRecorder{},
 		storage.NewExecutionStore(),
 		storage.NewApprovalStore(),
+		storage.NewUserStore(),
 		domain.EnvDevelopment,
 	)
 }

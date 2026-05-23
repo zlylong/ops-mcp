@@ -19,6 +19,10 @@ import (
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/audit"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/config"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/policy"
+	"github.com/zlylong/darwin-ops-mcp/backend/internal/domain"
+
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/storage"
 )
 
@@ -38,7 +42,15 @@ func main() {
 	auditor := audit.NewStore(logger)
 	executions := storage.NewExecutionStore()
 	approvals := storage.NewApprovalStore()
-	registry := app.NewRegistry(policy.NewEngine(), auditor, executions, approvals, cfg.Environment)
+	users := storage.NewUserStore()
+	registry := app.NewRegistry(policy.NewEngine(), auditor, executions, approvals, users, cfg.Environment)
+
+	// Seed a default admin user (password: admin1234) if no users exist
+	if len(users.List()) == 0 {
+		adminHash, _ := bcrypt.GenerateFromPassword([]byte("admin1234"), bcrypt.DefaultCost)
+		registry.Users().Add(domain.User{Username: "admin", Nickname: "Administrator", Role: domain.RoleAdmin, Status: "active"}, "admin1234", adminHash)
+		logger.Info("seeded default admin user", "username", "admin", "password", "[REDACTED]")
+	}
 	linuxTools := app.LinuxTools(linux.NewMockAdapter())
 	if cfg.Mode == "local" {
 		localLinux := linux.NewLocalAdapter()

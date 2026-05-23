@@ -28,7 +28,7 @@ func (m *mockRecorder) Record(record domain.AuditRecord) domain.AuditRecord {
 func (m *mockRecorder) List() []domain.AuditRecord { return nil }
 
 func createTestRegistry() *app.Registry {
-	registry := app.NewRegistry(policy.NewEngine(), &mockRecorder{}, storage.NewExecutionStore(), storage.NewApprovalStore(), domain.EnvDevelopment)
+	registry := app.NewRegistry(policy.NewEngine(), &mockRecorder{}, storage.NewExecutionStore(), storage.NewApprovalStore(), storage.NewUserStore(), domain.EnvDevelopment)
 	// 使用 ReadOnly 工具，Low 风险
 	registry.Register(domain.Tool{Name: "test.tool", ReadOnly: true, Risk: domain.RiskLow}, func(ctx context.Context, params map[string]any) (map[string]any, error) {
 		return map[string]any{"result": "ok"}, nil

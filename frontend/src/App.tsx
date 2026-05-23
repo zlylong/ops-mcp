@@ -17,6 +17,9 @@ import { AuditPage } from './pages/AuditPage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
 import { ToolApplicationsPage } from './pages/ToolApplicationsPage';
 import { AgentAPIKeysPage } from './pages/AgentAPIKeysPage';
+import { LoginPage } from './pages/LoginPage';
+import { UserProfilePage } from './pages/UserProfilePage';
+import { UsersPage } from './pages/UsersPage';
 
 type Language = 'en' | 'zh';
 let currentLanguage: Language = (localStorage.getItem('darwin-ops-mcp-language') as Language) || 'en';
@@ -25,7 +28,11 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWind
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || '0.1.0';
 
 function UserMenu() {
+  const navigate = useNavigate();
   const items: MenuProps['items'] = [
+    { key: 'profile', icon: <UserOutlined />, label: '个人中心', onClick: () => navigate('/profile') },
+    { key: 'users', icon: <ApiOutlined />, label: '用户管理', onClick: () => navigate('/users') },
+    { type: 'divider' as const },
     { key: 'swagger', icon: <ApiOutlined />, label: 'Swagger API 文档', onClick: () => window.open('/swagger', '_blank', 'noopener,noreferrer') },
   ];
   return (
@@ -47,6 +54,8 @@ const menuItems = [
   { key: '/audit', icon: <AuditOutlined />, label: '审计中心' },
   { key: '/approvals', icon: <CheckCircleOutlined />, label: '任务审批中心' },
   { key: '/tool-applications', icon: <ToolOutlined />, label: '工具审批中心' },
+  { key: '/profile', icon: <UserOutlined />, label: '个人中心' },
+  { key: '/users', icon: <KeyOutlined />, label: '用户管理' },
   { key: '/agent-keys', icon: <KeyOutlined />, label: 'Agent Key 管理' },
 ];
 
@@ -57,7 +66,7 @@ function AppShell() {
   return (
     <Layout className="app-shell">
       <Layout.Sider className="sidebar" breakpoint="lg" collapsedWidth="0">
-        <div className="brand"><ApiOutlined /><span>Darwin Ops MCP</span></div>
+        <div className="brand"><ApiOutlined /><span style={{ cursor: "pointer" }} onClick={() => navigate("/")}>Darwin Ops MCP</span></div>
         <Menu theme="dark" mode="inline" selectedKeys={[selected]} items={menuItems} onClick={({ key }) => navigate(key)} />
       </Layout.Sider>
       <Layout>
@@ -77,6 +86,9 @@ function AppShell() {
             <Route path="/audit" element={<AuditPage />} />
             <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/tool-applications" element={<ToolApplicationsPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/profile" element={<UserProfilePage />} />
+            <Route path="/users" element={<UsersPage />} />
             <Route path="/agent-keys" element={<AgentAPIKeysPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

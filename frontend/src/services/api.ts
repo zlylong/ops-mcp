@@ -1,4 +1,4 @@
-import type { AgentAPIKey, AgentAPIKeyCreateRequest, AgentAPIKeyCreateResponse, Application, ApplicationRequest, AuditEvent, Approval, Execution, ExecuteResult, ExecuteRequest, Tool, ToolRequest, Summary } from '../types';
+import type { AgentAPIKey, AgentAPIKeyCreateRequest, AgentAPIKeyCreateResponse, Application, ApplicationRequest, AuditEvent, Approval, ChangePasswordRequest, Execution, ExecuteResult, ExecuteRequest, LoginResponse, Tool, ToolRequest, Summary, User, UserCreateRequest, UserUpdateRequest, ChangePasswordByAdminRequest } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? '';
 const MOCK_API = import.meta.env.VITE_MOCK_API === 'true';
@@ -171,7 +171,71 @@ async function mockRequest<T>(path: string, init?: RequestInit): Promise<T> {
     key.revokedAt = new Date().toISOString();
     return key as T;
   }
-  if (path === '/healthz') return { status: 'ok', mode: 'mock', environment: 'development' } as T;
+  const mockUsers: User[] = [
+  { id: 'mock-admin-1', username: 'admin', nickname: 'Administrator', role: 'admin', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'mock-viewer-1', username: 'viewer', nickname: 'Viewer', role: 'viewer', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+];
+const mockCurrentUser: User = { id: 'mock-admin-1', username: 'admin', nickname: 'Administrator', role: 'admin', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+if (path === '/healthz') return { status: 'ok', mode: 'mock', environment: 'development' } as T;
+  // User login
+  if (path === '/api/v1/users/login' && init?.method === 'POST') {
+    const req = JSON.parse(String(init.body ?? '{}')) as { username: string; password: string };
+    const user = mockUsers.find((u) => u.username === req.username && u.status === 'active');
+    if (!user) throw new ApiError(401, { error: 'invalid username or password' });
+    if (user.username === 'viewer' && req.password !== 'viewer1234') throw new ApiError(401, { error: 'invalid username or password' });
+    if (user.username === 'admin' && req.password !== 'admin1234') throw new ApiError(401, { error: 'invalid username or password' });
+    return { token: 'user:' + user.id, user, expiresIn: 86400 * 7 } as T;
+  }
+  // Get me
+  if (path === '/api/v1/users/me' && (!init?.method || init.method === 'GET')) return mockCurrentUser as T;
+  // Update me
+  if (path === '/api/v1/users/me' && init?.method === 'PUT') {
+    const req = JSON.parse(String(init.body ?? '{}')) as UserUpdateRequest;
+    Object.assign(mockCurrentUser, req);
+    return { ...mockCurrentUser } as T;
+  }
+  // Change my password
+  if (path === '/api/v1/users/me/password' && init?.method === 'PUT') {
+    const req = JSON.parse(String(init.body ?? '{}')) as { oldPassword: string; newPassword: string };
+    if (req.oldPassword === 'wrong') throw new ApiError(403, { error: 'old password is incorrect' });
+    if (req.newPassword.length < 8) throw new ApiError(400, { error: 'new password must be at least 8 characters' });
+    return { message: 'password changed successfully' } as T;
+  }
+  // List users (admin)
+  if (path === '/api/v1/users' && (!init?.method || init.method === 'GET')) return [...mockUsers] as T;
+  // Create user (admin)
+  if (path === '/api/v1/users' && init?.method === 'POST') {
+    const req = JSON.parse(String(init.body ?? '{}')) as UserCreateRequest;
+    if (!req.username || !req.password) throw new ApiError(400, { error: 'username and password are required' });
+    if (mockUsers.some((u) => u.username === req.username)) throw new ApiError(400, { error: 'username already taken' });
+    const newUser: User = { id: 'mock-user-' + Date.now(), username: req.username, nickname: req.nickname ?? req.username, email: req.email, role: req.role, status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    mockUsers.unshift(newUser);
+    return newUser as T;
+  }
+  // Get user by id (admin)
+  if (path.startsWith('/api/v1/users/') && !path.endsWith('/password') && (!init?.method || init.method === 'GET')) {
+    const id = decodeURIComponent(path.replace('/api/v1/users/', ''));
+    const user = mockUsers.find((u) => u.id === id);
+    if (!user) throw new ApiError(404, { error: 'user not found' });
+    return user as T;
+  }
+  // Update user (admin)
+  if (path.startsWith('/api/v1/users/') && !path.endsWith('/password') && init?.method === 'PUT') {
+    const id = decodeURIComponent(path.replace('/api/v1/users/', ''));
+    const idx = mockUsers.findIndex((u) => u.id === id);
+    if (idx < 0) throw new ApiError(404, { error: 'user not found' });
+    const req = JSON.parse(String(init.body ?? '{}')) as UserUpdateRequest;
+    Object.assign(mockUsers[idx], req);
+    return mockUsers[idx] as T;
+  }
+  // Delete user (admin)
+  if (path.startsWith('/api/v1/users/') && init?.method === 'DELETE') {
+    const id = decodeURIComponent(path.replace('/api/v1/users/', ''));
+    const idx = mockUsers.findIndex((u) => u.id === id);
+    if (idx < 0) throw new ApiError(404, { error: 'user not found' });
+    mockUsers.splice(idx, 1);
+    return null as unknown as T;
+  }
   throw new ApiError(404, { error: 'mock route not found' });
 }
 
@@ -202,4 +266,16 @@ export const api = {
   agentAPIKeys: () => requestJSON<AgentAPIKey[]>('/api/v1/agent-keys'),
   createAgentAPIKey: (req: AgentAPIKeyCreateRequest) => requestJSON<AgentAPIKeyCreateResponse>('/api/v1/agent-keys', { method: 'POST', body: JSON.stringify(req) }),
   revokeAgentAPIKey: (id: string) => requestJSON<AgentAPIKey>(`/api/v1/agent-keys/${encodeURIComponent(id)}/revoke`, { method: 'POST' }),
+
+  // ── User management ────────────────────────────────────────────────────────
+  login: (req: { username: string; password: string }) => requestJSON<LoginResponse>('/api/v1/users/login', { method: 'POST', body: JSON.stringify(req) }),
+  getMe: () => requestJSON<User>('/api/v1/users/me'),
+  updateMe: (req: UserUpdateRequest) => requestJSON<User>('/api/v1/users/me', { method: 'PUT', body: JSON.stringify(req) }),
+  changeMyPassword: (req: { oldPassword: string; newPassword: string }) => requestJSON<{ message: string }>('/api/v1/users/me/password', { method: 'PUT', body: JSON.stringify(req) }),
+  listUsers: () => requestJSON<User[]>('/api/v1/users'),
+  createUser: (req: UserCreateRequest) => requestJSON<User>('/api/v1/users', { method: 'POST', body: JSON.stringify(req) }),
+  getUser: (id: string) => requestJSON<User>(`/api/v1/users/${encodeURIComponent(id)}`),
+  updateUser: (id: string, req: UserUpdateRequest) => requestJSON<User>(`/api/v1/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(req) }),
+  deleteUser: (id: string) => requestJSON<void>(`/api/v1/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  resetUserPassword: (id: string, req: { newPassword: string }) => requestJSON<{ message: string }>(`/api/v1/users/${encodeURIComponent(id)}/password`, { method: 'PUT', body: JSON.stringify(req) }),
 };

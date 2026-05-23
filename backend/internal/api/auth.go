@@ -35,12 +35,24 @@ func authRequired(masterToken string, registry *app.Registry) gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		// Try agent API key auth
 		if registry != nil {
 			if key, ok := registry.AuthenticateAgentAPIKey(provided); ok {
 				c.Set(authIsMasterKey, false)
 				c.Set(authAgentKey, key)
 				c.Next()
 				return
+			}
+			// Try user token auth (format: "user:<userID>")
+			if strings.HasPrefix(provided, "user:") {
+				userID := strings.TrimPrefix(provided, "user:")
+				user, found := registry.Users().Get(userID)
+				if found && user.Status == "active" {
+					c.Set(authIsMasterKey, false)
+					c.Set(authUserID, userID)
+					c.Next()
+					return
+				}
 			}
 		}
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid bearer token"})
