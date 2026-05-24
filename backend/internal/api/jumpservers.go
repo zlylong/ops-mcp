@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,6 +12,94 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/domain"
 )
+
+// ssrfBlocklist hosts and IP ranges that are forbidden as JumpServer targets
+// to prevent SSRF attacks against cloud metadata services and internal networks.
+var ssrfBlocklist = []net.IPNet{
+	// Loopback
+	{Mask: net.CIDRMask(8, 32), IP: net.IP{127, 0, 0, 0}},
+	// Link-local (169.254.x.x) — used by cloud metadata services
+	{Mask: net.CIDRMask(16, 32), IP: net.IP{169, 254, 0, 0}},
+	// Private 10.0.0.0/8
+	{Mask: net.CIDRMask(8, 32), IP: net.IP{10, 0, 0, 0}},
+	// Private 172.16.0.0/12
+	{Mask: net.CIDRMask(12, 32), IP: net.IP{172, 16, 0, 0}},
+	// Private 192.168.0.0/16
+	{Mask: net.CIDRMask(16, 32), IP: net.IP{192, 168, 0, 0}},
+	// CGNAT 100.64.0.0/10 (carrier-grade NAT)
+	{Mask: net.CIDRMask(10, 32), IP: net.IP{100, 64, 0, 0}},
+	// Any IP (0.0.0.0/0 already blocked by being non-routable, kept for explicitness)
+}
+
+// isSSRFHost returns true if the host is known to be an internal/metadata address.
+func isSSRFHost(host string) bool {
+	// Check raw hostname strings used by cloud metadata services.
+	host = strings.ToLower(strings.TrimSpace(host))
+	switch host {
+	case "localhost", "metadata.google.internal", "metadata.internal":
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	for _, block := range ssrfBlocklist {
+		if block.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// isAllowedProbePort returns true if the port is allowed for connectivity probes.
+// Only 80 (HTTP) and 443 (HTTPS) are permitted.
+func isAllowedProbePort(port int) bool {
+	return port == 80 || port == 443
+}
+
+// validateProbeURL checks a full URL for SSRF readiness.
+// It ensures the scheme is http/https, the port is 80 or 443, and the host
+// is not in the SSRF blocklist. Returns an error describing the violation.
+func validateProbeURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return errors.New("invalid probe URL")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("probe URL scheme must be http or https")
+	}
+	host, port, err := net.SplitHostPort(parsed.Host)
+	if err != nil {
+		// If no port in URL, net.SplitHostPort returns an error and host=parsed.Host.
+		host = parsed.Host
+		if parsed.Scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	if host == "" {
+		return errors.New("probe URL has no host")
+	}
+	if !isAllowedProbePort(portFromString(port)) {
+		return errors.New("probe URL port must be 80 or 443")
+	}
+	if isSSRFHost(host) {
+		return errors.New("probe URL host is in the SSRF blocklist")
+	}
+	return nil
+}
+
+func portFromString(s string) int {
+	var p int
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0
+		}
+		p = p*10 + int(c-'0')
+	}
+	return p
+}
 
 func normalizeJumpServerURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
@@ -23,6 +112,10 @@ func normalizeJumpServerURL(raw string) (string, error) {
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return "", errors.New("baseUrl scheme must be http or https")
+	}
+	// Enforce SSRF protection on the stored BaseURL as well.
+	if err := validateProbeURL(raw); err != nil {
+		return "", errors.New("baseUrl: " + err.Error())
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	parsed.RawQuery = ""
@@ -147,6 +240,11 @@ func (s *Server) deleteJumpServer(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// testJumpServer probes the JumpServer base URL for connectivity.
+//
+// SECURITY: The URL was already validated at creation/update time by
+// normalizeJumpServerURL which enforces the SSRF blocklist and port restrictions.
+// An additional runtime check is added here as a defence-in-depth measure.
 func (s *Server) testJumpServer(c *gin.Context) {
 	if !s.requireAdminRole(c) {
 		return
@@ -161,6 +259,14 @@ func (s *Server) testJumpServer(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 	defer cancel()
 	probeURL := strings.TrimRight(item.BaseURL, "/") + "/api/docs/"
+
+	// Defence-in-depth: validate the URL before probing.
+	if err := validateProbeURL(probeURL); err != nil {
+		_, _ = s.registry.JumpServers().MarkChecked(id, "unreachable", checkedAt)
+		c.JSON(http.StatusOK, domain.JumpServerConnectionCheck{ID: item.ID, Name: item.Name, BaseURL: item.BaseURL, Reachable: false, Status: "unreachable", Message: "ssrf blocked: " + err.Error(), CheckedAt: checkedAt})
+		return
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

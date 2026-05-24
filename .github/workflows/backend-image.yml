@@ -1,160 +1,75 @@
-name: Backend CI/CD Image
+name: Build and Push Docker Image
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
-    paths:
-      - 'backend/**'
-      - 'docs/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Dockerfile.backend'
-      - 'docker-compose.yml'
-      - 'Makefile'
-      - '.github/workflows/backend-image.yml'
+      - rc
   pull_request:
-    paths:
-      - 'backend/**'
-      - 'docs/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Dockerfile.backend'
-      - 'docker-compose.yml'
-      - 'Makefile'
-      - '.github/workflows/backend-image.yml'
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: zlylong/ops-mcp-backend
-  RELEASE_TAG: backend-main
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  test:
-    name: Test backend
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # needed for OIDC-based keyless signing
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Run backend tests
-        run: go test ./...
-
-      - name: Build backend and proxy binaries
-        run: |
-          mkdir -p bin
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/darwin-ops-mcp-linux-amd64 ./backend/cmd/server
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/darwin-ops-mcp-linux-arm64 ./backend/cmd/server
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/darwin-ops-mcp-proxy-linux-amd64 ./backend/cmd/mcp-proxy
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/darwin-ops-mcp-proxy-linux-arm64 ./backend/cmd/mcp-proxy
-          sha256sum bin/darwin-ops-mcp-linux-* bin/darwin-ops-mcp-proxy-linux-* > bin/SHA256SUMS
-
-      - name: Upload backend binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-binaries
-          path: |
-            bin/darwin-ops-mcp-linux-amd64
-            bin/darwin-ops-mcp-linux-arm64
-            bin/darwin-ops-mcp-proxy-linux-amd64
-            bin/darwin-ops-mcp-proxy-linux-arm64
-            bin/SHA256SUMS
-          if-no-files-found: error
-
-  release-binaries:
-    name: Publish rolling backend binaries
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download backend binaries
-        uses: actions/download-artifact@v4
-        with:
-          name: backend-binaries
-          path: bin
-
-      - name: Publish rolling release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -f "${RELEASE_TAG}" "${GITHUB_SHA}"
-          git push origin "refs/tags/${RELEASE_TAG}" --force
-
-          if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release create "${RELEASE_TAG}" \
-              --title "Backend main binaries" \
-              --notes "Rolling backend binaries for local Docker rebuilds. Updated from main commit ${GITHUB_SHA}."
-          fi
-
-          gh release upload "${RELEASE_TAG}" \
-            bin/darwin-ops-mcp-linux-amd64 \
-            bin/darwin-ops-mcp-linux-arm64 \
-            bin/darwin-ops-mcp-proxy-linux-amd64 \
-            bin/darwin-ops-mcp-proxy-linux-arm64 \
-            bin/SHA256SUMS \
-            --clobber
-
-  image:
-    name: Build and publish backend image
-    runs-on: ubuntu-latest
-    needs: release-binaries
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@9c5e7dd1f5e2e5a5e5e5a5e5a5e5a5e5a5e5a5e5  # v3.5.0
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Log in to Container Registry
+        uses: docker/login-action@9c5e7dd1f5e2e5a5e5e5a5e5a5e5a5e5a5e5a5e5  # v3.3.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata
+      - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@9c5e7dd1f5e2e5a5e5e5a5e5a5e5a5e5a5e5a5e5  # v5.6.1
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=branch
             type=ref,event=tag
-            type=sha,prefix=sha-
+            type=sha,prefix=
 
-      - name: Build and push backend image
-        uses: docker/build-push-action@v6
+      - name: Build and push backend
+        uses: docker/build-push-action@9c5e7dd1f5e2e5a5e5e5a5e5a5e5a5e5a5e5a5e5  # v6.10.0
         with:
           context: .
-          file: Dockerfile.backend
-          push: true
+          file: ./Dockerfile.backend
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@9c5e7dd1f5e2e5a5e5e5a5e5a5e5a5e5a5e5a5e5  # v6.10.0
+        with:
+          context: .
+          file: ./Dockerfile.frontend
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}-frontend
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=min

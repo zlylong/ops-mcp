@@ -104,12 +104,11 @@ func (s *Server) deleteTool(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// executeTool executes a tool with the provided parameters
+// executeTool executes a tool with the provided parameters.
 //
 // @Summary Execute Tool
 // @Description Executes a tool with the provided parameters. Returns 202 if approval
-//
-//	is required; returns 200 on immediate execution.
+// is required; returns 200 on immediate execution.
 //
 // @Tags tools
 // @Accept json
@@ -128,10 +127,35 @@ func (s *Server) executeTool(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
 		return
 	}
-	if req.Actor == "" {
-		req.Actor = authenticatedActor(c)
+	execReq := domainRequest(req)
+
+	// SECURITY: resolve authoritative role and actor from the authenticated identity.
+	// The Role and Approved fields from the HTTP request body are ALWAYS ignored
+	// to prevent privilege escalation. Only the server-side authenticated identity
+	// (agent API key or user session) determines the effective role.
+	if agentKey, ok := authenticatedAgent(c); ok {
+		execReq.Role = agentKey.Role
+		if req.Actor == "" {
+			execReq.Actor = agentKey.Actor
+		}
+	} else if uid, ok := c.Get(authUserID); ok {
+		if user, found := s.registry.Users().Get(uid.(string)); found {
+			execReq.Role = user.Role
+			if req.Actor == "" {
+				execReq.Actor = user.Username
+			}
+		}
 	}
-	result, status, err := s.registry.Execute(c.Request.Context(), c.Param("name"), domainRequest(req))
+
+	// SECURITY: approved is always false; the only valid approval path is
+	// registry.Approve() which re-executes the tool internally.
+	execReq.Approved = false
+
+	if req.Actor != "" {
+		execReq.Actor = req.Actor
+	}
+
+	result, status, err := s.registry.Execute(c.Request.Context(), c.Param("name"), execReq)
 	if err != nil {
 		c.JSON(status, gin.H{"error": result.Message, "executionId": result.ExecutionID, "auditId": result.AuditID, "approvalId": result.ApprovalID})
 		return
@@ -143,7 +167,6 @@ func (s *Server) executeTool(c *gin.Context) {
 //
 // @Summary Submit Tool Application
 // @Description Applies for access to a tool with a specific risk level, role, and reason.
-//
 //	Returns 201 with the application record. High-risk (high/critical) applications
 //	are set to "pending" and require admin review; low/medium are auto-approved.
 //

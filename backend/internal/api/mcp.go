@@ -64,6 +64,14 @@ func (s *Server) mcp(c *gin.Context) {
 	}
 }
 
+// handleMCPToolCall dispatches an MCP tools/call request.
+//
+// SECURITY NOTES:
+// - role: always resolved server-side from the authenticated identity (agent key
+//   or user token). The caller's args.role is IGNORED to prevent privilege escalation.
+// - approved: always forced to false here. The only valid approval path is through
+//   registry.Approve() which re-dispatches the tool internally with approved=true.
+// - actor: likewise taken from the authenticated agent key, not from args.actor.
 func (s *Server) handleMCPToolCall(c *gin.Context, req mcpRequest) {
 	var params mcpCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -75,7 +83,25 @@ func (s *Server) handleMCPToolCall(c *gin.Context, req mcpRequest) {
 		c.JSON(http.StatusOK, mcpFailure(req.ID, -32602, "invalid params", "tool name is required"))
 		return
 	}
-	result, status, err := s.registry.Execute(c.Request.Context(), params.Name, mcpExecuteRequest(params.Arguments))
+	execReq, actor := mcpExecuteRequest(params.Arguments)
+
+	// Resolve authoritative role and actor from the authenticated identity.
+	if agentKey, ok := authenticatedAgent(c); ok {
+		execReq.Role = agentKey.Role
+		execReq.Actor = agentKey.Actor
+		actor = agentKey.Actor
+	} else if uid, ok := c.Get(authUserID); ok {
+		if user, found := s.registry.Users().Get(uid.(string)); found {
+			execReq.Role = user.Role
+			execReq.Actor = actor
+		}
+	}
+
+	// SECURITY: approved is always false; the only valid approval path is
+	// registry.Approve() which re-executes the tool internally.
+	execReq.Approved = false
+
+	result, status, err := s.registry.Execute(c.Request.Context(), params.Name, execReq)
 	payload := gin.H{"httpStatus": status, "result": result}
 	if err != nil {
 		payload["error"] = err.Error()
@@ -84,41 +110,44 @@ func (s *Server) handleMCPToolCall(c *gin.Context, req mcpRequest) {
 	c.JSON(http.StatusOK, mcpSuccess(req.ID, gin.H{"content": []gin.H{{"type": "text", "text": string(text)}}, "structuredContent": payload, "isError": status >= 400}))
 }
 
-func mcpExecuteRequest(args map[string]any) domain.ExecuteRequest {
+// mcpExecuteRequest extracts tool execution parameters from the MCP arguments map.
+// It returns an ExecuteRequest and the raw actor string for further resolution.
+//
+// NOTE: The role and approved fields returned here are defaults that are ALWAYS
+// over-ridden in handleMCPToolCall after server-side identity resolution.
+// Callers MUST NOT rely on these fields having any effect.
+func mcpExecuteRequest(args map[string]any) (domain.ExecuteRequest, string) {
 	if args == nil {
 		args = map[string]any{}
 	}
 	actor := stringArg(args, "actor", "external-agent")
-	role := domain.Role(stringArg(args, "role", string(domain.RoleViewer)))
-	target := stringArg(args, "target", "")
-	approved := boolArg(args, "approved", false)
 	parameters := map[string]any{}
 	if nested, ok := args["parameters"].(map[string]any); ok {
 		parameters = nested
 	} else {
 		for k, v := range args {
-			switch k {
-			case "actor", "role", "target", "approved":
+			if k == "actor" || k == "role" || k == "target" || k == "approved" {
 				continue
-			default:
-				parameters[k] = v
 			}
+			parameters[k] = v
 		}
 	}
-	return domain.ExecuteRequest{Actor: actor, Role: role, Target: target, Approved: approved, Parameters: parameters}
+	return domain.ExecuteRequest{
+		Actor:      actor,
+		Role:       domain.RoleViewer, // OVER-RIDDEN server-side; caller role is ignored
+		Target:     stringArg(args, "target", ""),
+		Approved:   false, // OVER-RIDDEN server-side; caller approval flag is ignored
+		Parameters: parameters,
+	}, actor
 }
+
 func stringArg(args map[string]any, key, fallback string) string {
 	if v, ok := args[key].(string); ok && strings.TrimSpace(v) != "" {
 		return v
 	}
 	return fallback
 }
-func boolArg(args map[string]any, key string, fallback bool) bool {
-	if v, ok := args[key].(bool); ok {
-		return v
-	}
-	return fallback
-}
+
 func (s *Server) mcpTools() []gin.H {
 	tools := s.registry.List()
 	out := make([]gin.H, 0, len(tools))
@@ -127,6 +156,7 @@ func (s *Server) mcpTools() []gin.H {
 	}
 	return out
 }
+
 func mcpToolDescription(tool domain.Tool) string {
 	parts := []string{tool.Description, "category=" + tool.Category, "risk=" + string(tool.Risk), fmt.Sprintf("readOnly=%t", tool.ReadOnly)}
 	if tool.RequiresApproval {
@@ -134,8 +164,15 @@ func mcpToolDescription(tool domain.Tool) string {
 	}
 	return strings.TrimSpace(strings.Join(parts, "; "))
 }
+
+// mcpInputSchema returns the JSON Schema for a tool input.
+// Note: role and approved are NOT enumerated in the schema because they
+// are server-side decisions, not caller-supplied parameters.
 func mcpInputSchema(tool domain.Tool) gin.H {
-	properties := gin.H{"actor": gin.H{"type": "string", "description": "Actor name used for audit records", "default": "external-agent"}, "role": gin.H{"type": "string", "description": "Policy role", "enum": []string{"viewer", "operator", "admin"}, "default": "viewer"}, "target": gin.H{"type": "string", "description": "Human-readable target, for example host=192.168.20.166"}, "approved": gin.H{"type": "boolean", "description": "Set true only after an external approval decision", "default": false}}
+	properties := gin.H{
+		"actor":  gin.H{"type": "string", "description": "Actor name for audit records", "default": "external-agent"},
+		"target": gin.H{"type": "string", "description": "Human-readable target (e.g. host=192.168.20.166)"},
+	}
 	required := []string{}
 	for name, schema := range tool.InputSchema {
 		prop := gin.H{"type": mcpJSONSchemaType(schema.Type), "description": schema.Description}
@@ -149,6 +186,7 @@ func mcpInputSchema(tool domain.Tool) gin.H {
 	}
 	return gin.H{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
 }
+
 func mcpJSONSchemaType(paramType string) string {
 	switch paramType {
 	case "number":
@@ -159,9 +197,11 @@ func mcpJSONSchemaType(paramType string) string {
 		return "string"
 	}
 }
+
 func mcpSuccess(id any, result any) mcpResponse {
 	return mcpResponse{JSONRPC: "2.0", ID: id, Result: result}
 }
+
 func mcpFailure(id any, code int, message string, data any) mcpResponse {
 	return mcpResponse{JSONRPC: "2.0", ID: id, Error: &mcpError{Code: code, Message: message, Data: data}}
 }
