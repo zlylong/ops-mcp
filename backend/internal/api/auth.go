@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/subtle"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -105,12 +106,19 @@ func IsRateLimited(ip string) (bool, int) {
 	return false, 0
 }
 
+// ClearFailedAuth removes failed-auth history after a successful authentication.
+// This prevents stale failed attempts from locking out a legitimate client behind
+// a shared NAT once it proves possession of a valid credential.
+func ClearFailedAuth(ip string) {
+	authRateLimiter.Delete(ip)
+}
+
 func authRequired(masterToken string, registry *app.Registry) gin.HandlerFunc {
 	masterToken = strings.TrimSpace(masterToken)
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		if limited, retryAfter := IsRateLimited(ip); limited {
-			c.Header("Retry-After", string(rune('0'+retryAfter/10))+string(rune('0'+retryAfter%10)))
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
 			c.AbortWithStatusJSON(http.StatusTooManyRequests,
 				gin.H{"error": "too many requests, please retry later", "retry_after_seconds": retryAfter})
 			return
@@ -130,6 +138,7 @@ func authRequired(masterToken string, registry *app.Registry) gin.HandlerFunc {
 		}
 		provided := strings.TrimSpace(strings.TrimPrefix(auth, prefix))
 		if subtle.ConstantTimeCompare([]byte(provided), []byte(masterToken)) == 1 {
+			ClearFailedAuth(ip)
 			c.Set(authIsMasterKey, true)
 			c.Next()
 			return
@@ -137,6 +146,7 @@ func authRequired(masterToken string, registry *app.Registry) gin.HandlerFunc {
 		// Try agent API key auth
 		if registry != nil {
 			if key, ok := registry.AuthenticateAgentAPIKey(provided); ok {
+				ClearFailedAuth(ip)
 				c.Set(authIsMasterKey, false)
 				c.Set(authAgentKey, key)
 				c.Next()
@@ -147,6 +157,7 @@ func authRequired(masterToken string, registry *app.Registry) gin.HandlerFunc {
 				userID := strings.TrimPrefix(provided, "user:")
 				user, found := registry.Users().Get(userID)
 				if found && user.Status == "active" {
+					ClearFailedAuth(ip)
 					c.Set(authIsMasterKey, false)
 					c.Set(authUserID, userID)
 					c.Next()

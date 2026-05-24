@@ -56,16 +56,18 @@ async function mockRequest<T>(path: string, init?: RequestInit): Promise<T> {
     const tool = mockTools.find((item) => item.name === name);
     if (!tool) throw new ApiError(404, { error: 'tool not found' });
     const now = new Date().toISOString();
-    if (tool.risk !== 'low' && !req.approved) {
-      const approval: Approval = { id: `mock-app-${Date.now()}`, executionId: '', tool: name, actor: req.actor, target: req.target, status: 'pending', reason: `pending approval for ${tool.risk}`, createdAt: now };
+    const actor = 'authenticated-user';
+    const role: import('../types').Role = 'operator';
+    if (tool.risk !== 'low') {
+      const approval: Approval = { id: `mock-app-${Date.now()}`, executionId: '', tool: name, actor, target: req.target, status: 'pending', reason: `pending approval for ${tool.risk}`, createdAt: now };
       mockApprovals.unshift(approval);
-      const execution: Execution = { id: `mock-exe-${Date.now()}`, tool: name, actor: req.actor, role: req.role, target: req.target, status: 'pending_approval', reason: 'pending approval', parameters: req.parameters, auditId: '', createdAt: now };
+      const execution: Execution = { id: `mock-exe-${Date.now()}`, tool: name, actor, role, target: req.target, status: 'pending_approval', reason: 'pending approval', parameters: req.parameters, auditId: '', createdAt: now };
       mockExecutions.unshift(execution);
       return { executionId: execution.id, approvalId: approval.id, auditId: '', status: 'pending_approval', message: 'pending approval' } as T;
     }
-    const execution: Execution = { id: `mock-exe-${Date.now()}`, tool: name, actor: req.actor, role: req.role, target: req.target, status: 'completed', reason: 'approved', parameters: req.parameters, result: mockToolData(name, req.parameters), auditId: `mock-aud-${Date.now()}`, createdAt: now };
+    const execution: Execution = { id: `mock-exe-${Date.now()}`, tool: name, actor, role, target: req.target, status: 'completed', reason: 'approved', parameters: req.parameters, result: mockToolData(name, req.parameters), auditId: `mock-aud-${Date.now()}`, createdAt: now };
     mockExecutions.unshift(execution);
-    mockAudit.unshift({ id: execution.auditId, executionId: execution.id, at: now, actor: req.actor, role: req.role, action: `tool.${name}`, target: req.target, allowed: true, reason: 'approved', parameters: req.parameters });
+    mockAudit.unshift({ id: execution.auditId, executionId: execution.id, at: now, actor, role, action: `tool.${name}`, target: req.target, allowed: true, reason: 'approved', parameters: req.parameters });
     return { executionId: execution.id, auditId: execution.auditId, status: 'completed', message: 'mock tool executed', data: execution.result } as T;
   }
   if (path.startsWith('/api/v1/tools/')) {

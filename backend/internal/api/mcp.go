@@ -67,11 +67,11 @@ func (s *Server) mcp(c *gin.Context) {
 // handleMCPToolCall dispatches an MCP tools/call request.
 //
 // SECURITY NOTES:
-// - role: always resolved server-side from the authenticated identity (agent key
-//   or user token). The caller's args.role is IGNORED to prevent privilege escalation.
-// - approved: always forced to false here. The only valid approval path is through
-//   registry.Approve() which re-dispatches the tool internally with approved=true.
-// - actor: likewise taken from the authenticated agent key, not from args.actor.
+//   - role: always resolved server-side from the authenticated identity (agent key
+//     or user token). The caller's args.role is IGNORED to prevent privilege escalation.
+//   - approved: always forced to false here. The only valid approval path is through
+//     registry.Approve() which re-dispatches the tool internally with approved=true.
+//   - actor: likewise taken from the authenticated agent key, not from args.actor.
 func (s *Server) handleMCPToolCall(c *gin.Context, req mcpRequest) {
 	var params mcpCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -83,18 +83,21 @@ func (s *Server) handleMCPToolCall(c *gin.Context, req mcpRequest) {
 		c.JSON(http.StatusOK, mcpFailure(req.ID, -32602, "invalid params", "tool name is required"))
 		return
 	}
-	execReq, actor := mcpExecuteRequest(params.Arguments)
+	execReq, _ := mcpExecuteRequest(params.Arguments)
 
 	// Resolve authoritative role and actor from the authenticated identity.
+	// Request-supplied actor/role/approved are ignored to prevent audit spoofing
+	// and privilege escalation.
 	if agentKey, ok := authenticatedAgent(c); ok {
 		execReq.Role = agentKey.Role
 		execReq.Actor = agentKey.Actor
-		actor = agentKey.Actor
 	} else if uid, ok := c.Get(authUserID); ok {
 		if user, found := s.registry.Users().Get(uid.(string)); found {
 			execReq.Role = user.Role
-			execReq.Actor = actor
+			execReq.Actor = user.Username
 		}
+	} else {
+		execReq.Actor = "master"
 	}
 
 	// SECURITY: approved is always false; the only valid approval path is
@@ -170,7 +173,6 @@ func mcpToolDescription(tool domain.Tool) string {
 // are server-side decisions, not caller-supplied parameters.
 func mcpInputSchema(tool domain.Tool) gin.H {
 	properties := gin.H{
-		"actor":  gin.H{"type": "string", "description": "Actor name for audit records", "default": "external-agent"},
 		"target": gin.H{"type": "string", "description": "Human-readable target (e.g. host=192.168.20.166)"},
 	}
 	required := []string{}

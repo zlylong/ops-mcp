@@ -35,6 +35,9 @@ import (
 // @Failure 409 {object} map[string]string
 // @Router /api/v1/tools [post]
 func (s *Server) createTool(c *gin.Context) {
+	if !s.requireAdminRole(c) {
+		return
+	}
 	var tool domain.Tool
 	if err := c.ShouldBindJSON(&tool); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
@@ -66,6 +69,9 @@ func (s *Server) createTool(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Router /api/v1/tools/{name} [put]
 func (s *Server) updateTool(c *gin.Context) {
+	if !s.requireAdminRole(c) {
+		return
+	}
 	var tool domain.Tool
 	if err := c.ShouldBindJSON(&tool); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
@@ -93,6 +99,9 @@ func (s *Server) updateTool(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Router /api/v1/tools/{name} [delete]
 func (s *Server) deleteTool(c *gin.Context) {
+	if !s.requireAdminRole(c) {
+		return
+	}
 	if err := s.registry.DeleteTool(c.Param("name")); err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, app.ErrToolNotFound) {
@@ -130,30 +139,25 @@ func (s *Server) executeTool(c *gin.Context) {
 	execReq := domainRequest(req)
 
 	// SECURITY: resolve authoritative role and actor from the authenticated identity.
-	// The Role and Approved fields from the HTTP request body are ALWAYS ignored
-	// to prevent privilege escalation. Only the server-side authenticated identity
-	// (agent API key or user session) determines the effective role.
+	// The Actor, Role, and Approved fields from the HTTP request body are ALWAYS
+	// ignored to prevent privilege escalation and audit-log spoofing. Only the
+	// server-side authenticated identity determines the effective execution
+	// identity.
 	if agentKey, ok := authenticatedAgent(c); ok {
 		execReq.Role = agentKey.Role
-		if req.Actor == "" {
-			execReq.Actor = agentKey.Actor
-		}
+		execReq.Actor = agentKey.Actor
 	} else if uid, ok := c.Get(authUserID); ok {
 		if user, found := s.registry.Users().Get(uid.(string)); found {
 			execReq.Role = user.Role
-			if req.Actor == "" {
-				execReq.Actor = user.Username
-			}
+			execReq.Actor = user.Username
 		}
+	} else {
+		execReq.Actor = "master"
 	}
 
 	// SECURITY: approved is always false; the only valid approval path is
 	// registry.Approve() which re-executes the tool internally.
 	execReq.Approved = false
-
-	if req.Actor != "" {
-		execReq.Actor = req.Actor
-	}
 
 	result, status, err := s.registry.Execute(c.Request.Context(), c.Param("name"), execReq)
 	if err != nil {
@@ -167,6 +171,7 @@ func (s *Server) executeTool(c *gin.Context) {
 //
 // @Summary Submit Tool Application
 // @Description Applies for access to a tool with a specific risk level, role, and reason.
+//
 //	Returns 201 with the application record. High-risk (high/critical) applications
 //	are set to "pending" and require admin review; low/medium are auto-approved.
 //
@@ -202,12 +207,16 @@ func (s *Server) submitApplication(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid risk level: must be low, medium, high, or critical"})
 		return
 	}
-	actor := c.GetHeader("X-Actor")
+	actor := authenticatedActor(c)
 	if actor == "" {
-		actor = authenticatedActor(c)
+		if uid, ok := c.Get(authUserID); ok {
+			if user, found := s.registry.Users().Get(uid.(string)); found {
+				actor = user.Username
+			}
+		}
 	}
 	if actor == "" {
-		actor = "anonymous"
+		actor = "master"
 	}
 	app := s.registry.SubmitApplication(req, actor)
 	c.JSON(http.StatusCreated, app)
@@ -222,6 +231,9 @@ func (s *Server) submitApplication(c *gin.Context) {
 // @Success 200 {array} map[string]any
 // @Router /api/v1/applications [get]
 func (s *Server) listApplications(c *gin.Context) {
+	if !s.requireAdminRole(c) {
+		return
+	}
 	c.JSON(http.StatusOK, s.registry.Applications())
 }
 
@@ -236,6 +248,9 @@ func (s *Server) listApplications(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Router /api/v1/applications/{id}/approve [post]
 func (s *Server) approveApplication(c *gin.Context) {
+	if !s.requireAdminRole(c) {
+		return
+	}
 	application, err := s.registry.ApproveApplication(c.Param("id"))
 	if err != nil {
 		status := http.StatusBadRequest
@@ -259,6 +274,9 @@ func (s *Server) approveApplication(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Router /api/v1/applications/{id}/reject [post]
 func (s *Server) rejectApplication(c *gin.Context) {
+	if !s.requireAdminRole(c) {
+		return
+	}
 	application, err := s.registry.RejectApplication(c.Param("id"))
 	if err != nil {
 		status := http.StatusBadRequest

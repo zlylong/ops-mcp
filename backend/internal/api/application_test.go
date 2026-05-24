@@ -205,8 +205,8 @@ func TestSubmitApplication_InvalidJSON(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-// TestSubmitApplication_ActorHeader verifies that X-Actor header is respected.
-func TestSubmitApplication_ActorHeader(t *testing.T) {
+// TestSubmitApplication_ActorHeaderIgnored verifies X-Actor cannot spoof the authenticated actor.
+func TestSubmitApplication_ActorHeaderIgnored(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	reg := createTestRegistryForApp()
 	srv := &Server{registry: reg, auditor: &mockRecorder{}, logger: slog.Default()}
@@ -232,11 +232,11 @@ func TestSubmitApplication_ActorHeader(t *testing.T) {
 	var resp domain.ToolApplication
 	err = json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
-	assert.Equal(t, "agent-ai-01", resp.Actor)
+	assert.Equal(t, "master", resp.Actor)
 }
 
-// TestSubmitApplication_AnonymousActor verifies fallback to "anonymous" when X-Actor is absent.
-func TestSubmitApplication_AnonymousActor(t *testing.T) {
+// TestSubmitApplication_MasterActor verifies fallback to the master-key actor when no user/agent identity is set.
+func TestSubmitApplication_MasterActor(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	reg := createTestRegistryForApp()
 	srv := &Server{registry: reg, auditor: &mockRecorder{}, logger: slog.Default()}
@@ -261,7 +261,7 @@ func TestSubmitApplication_AnonymousActor(t *testing.T) {
 	var resp domain.ToolApplication
 	err = json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
-	assert.Equal(t, "anonymous", resp.Actor)
+	assert.Equal(t, "master", resp.Actor)
 }
 
 // TestListApplications_OK verifies GET /applications returns all stored applications.
@@ -286,6 +286,7 @@ func TestListApplications_OK(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
+	c.Set(authIsMasterKey, true)
 
 	srv.listApplications(c)
 
@@ -306,6 +307,7 @@ func TestListApplications_Empty(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
+	c.Set(authIsMasterKey, true)
 
 	srv.listApplications(c)
 

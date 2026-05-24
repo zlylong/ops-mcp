@@ -47,33 +47,52 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 	})
 
 	v1 := protected.Group("/api/v1")
-	v1.POST("/users/login", s.login); v1.GET("/users/me", s.getMe)
-	v1.PUT("/users/me", s.updateMe); v1.PUT("/users/me/password", s.changeMyPassword)
-	v1.GET("/users", s.listUsers); v1.POST("/users", s.createUser)
-	v1.GET("/users/:id", s.getUser); v1.PUT("/users/:id", s.updateUser)
-	v1.DELETE("/users/:id", s.deleteUser); v1.PUT("/users/:id/password", s.changeUserPassword)
+	v1.POST("/users/login", s.login)
+	v1.GET("/users/me", s.getMe)
+	v1.PUT("/users/me", s.updateMe)
+	v1.PUT("/users/me/password", s.changeMyPassword)
+	v1.GET("/users", s.listUsers)
+	v1.POST("/users", s.createUser)
+	v1.GET("/users/:id", s.getUser)
+	v1.PUT("/users/:id", s.updateUser)
+	v1.DELETE("/users/:id", s.deleteUser)
+	v1.PUT("/users/:id/password", s.changeUserPassword)
 	v1.GET("/dashboard/summary", s.dashboardSummary)
-	v1.GET("/jumpservers", s.listJumpServers); v1.POST("/jumpservers", s.createJumpServer)
-	v1.GET("/jumpservers/:id", s.getJumpServer); v1.PUT("/jumpservers/:id", s.updateJumpServer)
-	v1.DELETE("/jumpservers/:id", s.deleteJumpServer); v1.POST("/jumpservers/:id/test", s.testJumpServer)
-	v1.GET("/agent-keys", s.listAgentAPIKeys); v1.POST("/agent-keys", s.createAgentAPIKey)
-	v1.DELETE("/agent-keys/:id", s.revokeAgentAPIKey); v1.POST("/agent-keys/:id/revoke", s.revokeAgentAPIKey)
-	v1.GET("/tools", s.tools); v1.POST("/tools", s.createTool)
-	v1.GET("/tools/:name", s.toolDetail); v1.PUT("/tools/:name", s.updateTool)
-	v1.DELETE("/tools/:name", s.deleteTool); v1.POST("/tools/:name/execute", s.executeTool)
-	v1.GET("/executions", s.executions); v1.GET("/executions/:id", s.executionDetail)
+	v1.GET("/jumpservers", s.listJumpServers)
+	v1.POST("/jumpservers", s.createJumpServer)
+	v1.GET("/jumpservers/:id", s.getJumpServer)
+	v1.PUT("/jumpservers/:id", s.updateJumpServer)
+	v1.DELETE("/jumpservers/:id", s.deleteJumpServer)
+	v1.POST("/jumpservers/:id/test", s.testJumpServer)
+	v1.GET("/agent-keys", s.listAgentAPIKeys)
+	v1.POST("/agent-keys", s.createAgentAPIKey)
+	v1.DELETE("/agent-keys/:id", s.revokeAgentAPIKey)
+	v1.POST("/agent-keys/:id/revoke", s.revokeAgentAPIKey)
+	v1.GET("/tools", s.tools)
+	v1.POST("/tools", s.createTool)
+	v1.GET("/tools/:name", s.toolDetail)
+	v1.PUT("/tools/:name", s.updateTool)
+	v1.DELETE("/tools/:name", s.deleteTool)
+	v1.POST("/tools/:name/execute", s.executeTool)
+	v1.GET("/executions", s.executions)
+	v1.GET("/executions/:id", s.executionDetail)
 	v1.GET("/audit", s.auditRecords)
-	v1.GET("/applications", s.listApplications); v1.POST("/applications", s.submitApplication)
-	v1.POST("/applications/:id/approve", s.approveApplication); v1.POST("/applications/:id/reject", s.rejectApplication)
+	v1.GET("/applications", s.listApplications)
+	v1.POST("/applications", s.submitApplication)
+	v1.POST("/applications/:id/approve", s.approveApplication)
+	v1.POST("/applications/:id/reject", s.rejectApplication)
 	v1.GET("/approvals", s.approvals)
-	v1.POST("/approvals/:id/approve", s.approve); v1.POST("/approvals/:id/reject", s.reject)
+	v1.POST("/approvals/:id/approve", s.approve)
+	v1.POST("/approvals/:id/reject", s.reject)
 	return r
 }
 
 func traceIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		traceID := c.GetHeader(TraceIDHeader)
-		if traceID == "" { traceID = generateTraceID() }
+		if traceID == "" {
+			traceID = generateTraceID()
+		}
 		c.Set(TraceIDHeader, traceID)
 		c.Header(TraceIDHeader, traceID)
 		c.Next()
@@ -84,7 +103,9 @@ func requestLogger(logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		if q := c.Request.URL.RawQuery; q != "" { path += "?" + q }
+		if q := c.Request.URL.RawQuery; q != "" {
+			path += "?" + q
+		}
 		traceID, _ := c.Get(TraceIDHeader)
 		c.Next()
 		logger.Info("http request", "method", c.Request.Method, "path", path,
@@ -109,29 +130,69 @@ func (s *Server) dashboardSummary(c *gin.Context) {
 		"auditRecords": len(s.auditor.List()), "approvals": len(s.registry.Approvals())})
 }
 
-func (s *Server) tools(c *gin.Context)                                    { c.JSON(http.StatusOK, s.registry.List()) }
-func (s *Server) toolDetail(c *gin.Context)                               { tool, ok := s.registry.Get(c.Param("name")); _ = tool; _ = ok }
-func (s *Server) executions(c *gin.Context)                               { c.JSON(http.StatusOK, s.registry.Executions()) }
-func (s *Server) executionDetail(c *gin.Context)                          { e, ok := s.registry.Execution(c.Param("id")); _ = e; _ = ok }
-func (s *Server) auditRecords(c *gin.Context)                             { c.JSON(http.StatusOK, s.auditor.List()) }
-func (s *Server) approvals(c *gin.Context)                                { c.JSON(http.StatusOK, s.registry.Approvals()) }
-func (s *Server) approve(c *gin.Context)                                  { a, e := s.registry.Approve(c.Param("id")); _ = a; _ = e }
-func (s *Server) reject(c *gin.Context)                                   { a, e := s.registry.Reject(c.Param("id")); _ = a; _ = e }
+func (s *Server) tools(c *gin.Context) { c.JSON(http.StatusOK, s.registry.List()) }
+func (s *Server) toolDetail(c *gin.Context) {
+	tool, ok := s.registry.Get(c.Param("name"))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "tool not found"})
+		return
+	}
+	c.JSON(http.StatusOK, tool)
+}
+func (s *Server) executions(c *gin.Context) { c.JSON(http.StatusOK, s.registry.Executions()) }
+func (s *Server) executionDetail(c *gin.Context) {
+	e, ok := s.registry.Execution(c.Param("id"))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "execution not found"})
+		return
+	}
+	c.JSON(http.StatusOK, e)
+}
+func (s *Server) auditRecords(c *gin.Context) { c.JSON(http.StatusOK, s.auditor.List()) }
+func (s *Server) approvals(c *gin.Context) {
+	if !s.requireAdminRole(c) {
+		return
+	}
+	c.JSON(http.StatusOK, s.registry.Approvals())
+}
+func (s *Server) approve(c *gin.Context) {
+	if !s.requireAdminRole(c) {
+		return
+	}
+	approval, err := s.registry.Approve(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, approval)
+}
+func (s *Server) reject(c *gin.Context) {
+	if !s.requireAdminRole(c) {
+		return
+	}
+	approval, err := s.registry.Reject(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, approval)
+}
 
 // cors returns a CORS middleware.
 //
 // SECURITY NOTE:
-// - Authorization and X-Actor are intentionally omitted from Access-Control-Allow-Headers.
-//   Bearer tokens must only be sent same-origin behind a reverse proxy.
-// - The API uses Authorization header (not cookies), so cross-origin pages
-//   cannot supply a valid token regardless of this header configuration.
+//   - Authorization and X-Actor are intentionally omitted from Access-Control-Allow-Headers.
+//     Bearer tokens must only be sent same-origin behind a reverse proxy.
+//   - The API uses Authorization header (not cookies), so cross-origin pages
+//     cannot supply a valid token regardless of this header configuration.
 func cors() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type,X-Trace-ID")
 		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent); return
+			c.AbortWithStatus(http.StatusNoContent)
+			return
 		}
 		c.Next()
 	}

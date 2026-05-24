@@ -1,12 +1,12 @@
 import React from 'react';
-import { Alert, Button, Form, Input, Modal, Select, Space, Switch, Typography, message } from 'antd';
+import { Alert, Button, Form, Input, Modal, Space, Typography, message } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
-import type { ExecuteResult, Role, Tool } from '../types';
+import type { ExecuteResult, Tool } from '../types';
 import { JsonBlock, RiskTag, ReadOnlyTag, defaultInput, parseJsonObject } from './utils';
 
 type Props = { tool?: Tool; open: boolean; onClose: () => void };
-type FormValues = { actor: string; role: Role; target: string; approved?: boolean; parameters: string };
+type FormValues = { target: string; parameters: string };
 
 export function ExecuteToolModal({ tool, open, onClose }: Props) {
   const [form] = Form.useForm<FormValues>();
@@ -15,7 +15,7 @@ export function ExecuteToolModal({ tool, open, onClose }: Props) {
 
   React.useEffect(() => {
     if (open && tool) {
-      form.setFieldsValue({ actor: 'admin', role: 'operator', target: 'local-dev', approved: false, parameters: defaultInput(tool) });
+      form.setFieldsValue({ target: 'local-dev', parameters: defaultInput(tool) });
       setResult(null);
     }
   }, [open, tool, form]);
@@ -24,10 +24,7 @@ export function ExecuteToolModal({ tool, open, onClose }: Props) {
     mutationFn: async (values: FormValues) => {
       if (!tool) throw new Error('tool is required');
       return api.execute(tool.name, {
-        actor: values.actor,
-        role: values.role,
         target: values.target,
-        approved: values.approved,
         parameters: parseJsonObject(values.parameters),
       });
     },
@@ -49,15 +46,12 @@ export function ExecuteToolModal({ tool, open, onClose }: Props) {
           <Space wrap>
             <ReadOnlyTag readOnly={tool.readOnly} />
             <RiskTag risk={tool.risk} />
-            {tool.requiresApproval || tool.risk !== 'low' ? <Alert type="warning" showIcon message="该工具可能需要审批或显式授权" /> : null}
+            {tool.requiresApproval || tool.risk !== 'low' ? <Alert type="warning" showIcon message="该工具可能需要管理员审批；执行人和角色由后端认证身份决定。" /> : null}
           </Space>
           <Typography.Paragraph type="secondary">{tool.description}</Typography.Paragraph>
           <Form layout="vertical" form={form} onFinish={(values) => mutation.mutate(values)}>
             <Space className="full" size="middle" wrap>
-              <Form.Item name="actor" label="执行人" rules={[{ required: true }]}><Input placeholder="admin" /></Form.Item>
-              <Form.Item name="role" label="角色" rules={[{ required: true }]}><Select style={{ width: 140 }} options={[{ value: 'viewer', label: 'viewer' }, { value: 'operator', label: 'operator' }, { value: 'admin', label: 'admin' }]} /></Form.Item>
               <Form.Item name="target" label="目标" rules={[{ required: true }]}><Input placeholder="local-dev" /></Form.Item>
-              <Form.Item name="approved" label="授权" valuePropName="checked"><Switch checkedChildren="已授权" unCheckedChildren="未授权" /></Form.Item>
             </Space>
             <Form.Item name="parameters" label="参数 JSON" rules={[{ required: true }, { validator: async (_, value) => { parseJsonObject(value); } }]}>
               <Input.TextArea rows={8} spellCheck={false} className="json-input" />
