@@ -67,7 +67,7 @@ Updated key semantics (as of 2026-05-23):
 - New user management APIs: `POST /api/v1/users/login`, `GET /api/v1/users/me`, `PUT /api/v1/users/me`, `PUT /api/v1/users/me/password`, `GET /api/v1/users`, `POST /api/v1/users`, `GET/PUT/DELETE /api/v1/users/:id`, `PUT /api/v1/users/:id/password`.
 - User roles: `admin`, `operator`, `viewer`.
 - User token format: `Bearer user:<userID>` (not JWT, a simple token).
-- Default admin seeded on first start: username `admin`, password `admin1234`.
+- Default admin seeded on first start: username `admin`; production password must come from `DARWIN_OPS_MCP_BOOTSTRAP_ADMIN_PASSWORD` (local mock/dev may use `admin1234` for demos).
 - Passwords stored as bcrypt hashes (never plaintext).
 - Master token auth falls back to first admin user for user-specific endpoints.
 - Frontend pages: `/login` (login form), `/profile` (view/edit self, change password), `/users` (admin user CRUD).

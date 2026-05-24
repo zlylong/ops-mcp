@@ -48,6 +48,18 @@ HTTP 与 MCP 执行 API 不信任调用方提交的身份或审批字段：
 
 - CORS 预检刻意不允许 `Authorization` 或 `X-Actor` 请求头。
 - GitHub Actions workflow 应使用最小权限，并将第三方 action 固定到不可变 commit SHA。
+- 前端依赖必须固定到具体 semver 范围，发布前应通过 `npm audit --audit-level=moderate`。
+- 后端容器镜像从仓库源码多阶段构建，不在镜像构建时下载可变的远程二进制。
+
+## 登录与 bootstrap 凭据
+
+- 密码登录路由公开，但成功登录只返回服务端可识别的 `user:<id>` Bearer token，失败尝试会进入限流。
+- 生产环境启动必须同时设置 `DARWIN_OPS_MCP_API_TOKEN` 与 `DARWIN_OPS_MCP_BOOTSTRAP_ADMIN_PASSWORD`。
+- 演示密码 `admin1234` 仅保留给非生产 mock/dev 首次启动体验。
+
+## JumpServer SSRF 防护
+
+JumpServer Base URL 与连通性探测限制为 80/443 端口的 `http`/`https`。Host 会同时按字面值与 DNS 解析结果校验；解析到 loopback、private、link-local、CGNAT、metadata、unspecified、IPv6 ULA/link-local 等地址会被拒绝。探测过程中的 redirect 也会在跟随前重新校验。
 
 ## 审计脱敏
 

@@ -29,6 +29,16 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	cfg := config.Load()
+	if cfg.Environment == domain.EnvProduction {
+		if cfg.APIToken == "" {
+			logger.Error("DARWIN_OPS_MCP_API_TOKEN is required in production")
+			os.Exit(1)
+		}
+		if cfg.BootstrapAdminPassword == "" {
+			logger.Error("DARWIN_OPS_MCP_BOOTSTRAP_ADMIN_PASSWORD is required in production")
+			os.Exit(1)
+		}
+	}
 	if cfg.DatabaseURL != "" && cfg.Mode == "postgres" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -46,11 +56,18 @@ func main() {
 	jumpServers := storage.NewJumpServerStore()
 	registry := app.NewRegistry(policy.NewEngine(), auditor, executions, approvals, users, jumpServers, cfg.Environment)
 
-	// Seed a default admin user (password: admin1234) if no users exist
+	// Seed an initial admin user if no users exist. Production deployments must
+	// provide DARWIN_OPS_MCP_BOOTSTRAP_ADMIN_PASSWORD; non-production mock/dev
+	// keeps the historical demo password for local first-run usability only.
 	if len(users.List()) == 0 {
-		adminHash, _ := bcrypt.GenerateFromPassword([]byte("admin1234"), bcrypt.DefaultCost)
-		registry.Users().Add(domain.User{Username: "admin", Nickname: "Administrator", Role: domain.RoleAdmin, Status: "active"}, "admin1234", adminHash)
-		logger.Info("seeded default admin user", "username", "admin", "password", "[REDACTED]")
+		adminPassword := cfg.BootstrapAdminPassword
+		if adminPassword == "" {
+			adminPassword = "admin1234"
+			logger.Warn("using demo bootstrap admin password; set DARWIN_OPS_MCP_BOOTSTRAP_ADMIN_PASSWORD outside local development", "username", "admin")
+		}
+		adminHash, _ := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
+		registry.Users().Add(domain.User{Username: "admin", Nickname: "Administrator", Role: domain.RoleAdmin, Status: "active"}, "", adminHash)
+		logger.Info("seeded bootstrap admin user", "username", "admin", "password", "[REDACTED]")
 	}
 	linuxTools := app.LinuxTools(linux.NewMockAdapter())
 	if cfg.Mode == "local" {

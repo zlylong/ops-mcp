@@ -36,6 +36,9 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 	protected.GET("/mcp", s.mcp)
 	protected.POST("/mcp", s.mcp)
 
+	publicV1 := r.Group("/api/v1")
+	publicV1.POST("/users/login", s.login)
+
 	swaggerHandler := ginSwagger.WrapHandler(swaggerFiles.NewHandler())
 	r.GET("/swagger", func(c *gin.Context) { c.Redirect(http.StatusMovedPermanently, "/swagger/index.html") })
 	r.GET("/swagger/*any", func(c *gin.Context) {
@@ -47,7 +50,6 @@ func NewRouter(cfg config.Config, registry *app.Registry, auditor audit.Recorder
 	})
 
 	v1 := protected.Group("/api/v1")
-	v1.POST("/users/login", s.login)
 	v1.GET("/users/me", s.getMe)
 	v1.PUT("/users/me", s.updateMe)
 	v1.PUT("/users/me/password", s.changeMyPassword)

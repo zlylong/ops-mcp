@@ -61,7 +61,7 @@ export function LoginPage() {
         </Form>
         <div style={{ marginTop: 16, textAlign: 'center' }}>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            默认账号：admin / admin1234
+            首次登录请使用部署时设置的 bootstrap 管理员密码；本地 mock/dev 演示环境可使用 admin / admin1234。
           </Text>
         </div>
       </Card>

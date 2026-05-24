@@ -156,7 +156,7 @@ func (s *Server) updateMe(c *gin.Context) {
 // @Failure 403 {object} map[string]string
 // @Router /api/v1/users/me/password [put]
 func (s *Server) changeMyPassword(c *gin.Context) {
-		userID := s.resolveUserID(c)
+	userID := s.resolveUserID(c)
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
 		return
@@ -392,27 +392,39 @@ func (s *Server) changeUserPassword(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/v1/users/login [post]
 func (s *Server) login(c *gin.Context) {
+	ip := c.ClientIP()
+	if limited, retryAfter := IsRateLimited(ip); limited {
+		c.Header("Retry-After", strconv.Itoa(retryAfter))
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please retry later", "retry_after_seconds": retryAfter})
+		return
+	}
+
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		RecordFailedAuth(ip)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username and password are required"})
 		return
 	}
 	user, hash, found := s.registry.Users().GetByUsername(strings.TrimSpace(req.Username))
 	if !found {
+		RecordFailedAuth(ip)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
 	if user.Status != "active" {
+		RecordFailedAuth(ip)
 		c.JSON(http.StatusForbidden, gin.H{"error": "account is " + user.Status})
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)); err != nil {
+		RecordFailedAuth(ip)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
+	ClearFailedAuth(ip)
 	c.JSON(http.StatusOK, gin.H{
 		"token":     "user:" + user.ID,
 		"user":      user,

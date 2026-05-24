@@ -166,7 +166,7 @@ docker compose up -d --force-recreate backend
 
 ### Backend 因 PostgreSQL 认证错误退出
 
-local adapter mode 应使用内存 store。如果它尝试连接 PostgreSQL，说明运行中的二进制可能还不是包含 local-mode 修复的版本，请从最新 GitHub Release 二进制重建：
+local adapter mode 应使用内存 store。如果它尝试连接 PostgreSQL，说明运行中的二进制可能还不是包含 local-mode 修复的版本，请从当前 Dockerfile 从仓库源码重建：
 
 ```bash
 docker compose build --no-cache backend

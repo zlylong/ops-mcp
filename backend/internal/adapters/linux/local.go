@@ -124,9 +124,12 @@ func (a *LocalAdapter) NetworkInterfaces(ctx context.Context, params map[string]
 
 func (a *LocalAdapter) ServiceStatus(ctx context.Context, params map[string]any) (map[string]any, error) {
 	service := stringParam(params, "service", "darwin-ops-mcp-backend")
+	if looksLikeOption(service) {
+		return nil, errors.New("service must not start with '-'")
+	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "systemctl", "show", service, "--property=ActiveState,SubState,NRestarts,ExecMainStartTimestamp", "--no-pager").CombinedOutput()
+	out, err := exec.CommandContext(ctx, "systemctl", "show", "--property=ActiveState,SubState,NRestarts,ExecMainStartTimestamp", "--no-pager", "--", service).CombinedOutput()
 	if err != nil {
 		return map[string]any{"service": service, "active": false, "state": "unavailable", "subState": "unknown", "error": strings.TrimSpace(string(out)), "source": "local"}, nil
 	}
@@ -136,6 +139,9 @@ func (a *LocalAdapter) ServiceStatus(ctx context.Context, params map[string]any)
 
 func (a *LocalAdapter) JournalTail(ctx context.Context, params map[string]any) (map[string]any, error) {
 	unit := stringParam(params, "unit", "darwin-ops-mcp-backend")
+	if looksLikeOption(unit) {
+		return nil, errors.New("unit must not start with '-'")
+	}
 	lines := intParam(params, "lines", 50)
 	if lines <= 0 || lines > 200 {
 		lines = 50
@@ -151,13 +157,16 @@ func (a *LocalAdapter) JournalTail(ctx context.Context, params map[string]any) (
 
 func (a *LocalAdapter) Ping(ctx context.Context, params map[string]any) (map[string]any, error) {
 	host := stringParam(params, "host", "1.1.1.1")
+	if looksLikeOption(host) {
+		return nil, errors.New("host must not start with '-'")
+	}
 	count := intParam(params, "count", 4)
 	if count <= 0 || count > 10 {
 		count = 4
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(count+3)*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "ping", "-c", strconv.Itoa(count), "-W", "2", host).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "ping", "-c", strconv.Itoa(count), "-W", "2", "--", host).CombinedOutput()
 	result := parsePingSummary(string(out))
 	result["host"] = host
 	result["count"] = count
@@ -177,6 +186,10 @@ func (a *LocalAdapter) DNSLookup(ctx context.Context, params map[string]any) (ma
 		result["error"] = err.Error()
 	}
 	return result, nil
+}
+
+func looksLikeOption(value string) bool {
+	return strings.HasPrefix(strings.TrimSpace(value), "-")
 }
 
 func (a *LocalAdapter) hostname() string {

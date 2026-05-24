@@ -7,12 +7,13 @@ import (
 )
 
 type Config struct {
-	Environment  domain.Environment
-	Mode         string
-	DatabaseURL  string
-	Addr         string
-	SeedMockData bool
-	APIToken     string
+	Environment            domain.Environment
+	Mode                   string
+	DatabaseURL            string
+	Addr                   string
+	SeedMockData           bool
+	APIToken               string
+	BootstrapAdminPassword string
 }
 
 func NewConfig() Config {
@@ -48,6 +49,9 @@ func Load() Config {
 	}
 	if token := firstEnv("DARWIN_OPS_MCP_API_TOKEN", "OPS_MCP_API_TOKEN", "MCP_API_TOKEN"); token != "" {
 		cfg.APIToken = token
+	}
+	if password := firstEnv("DARWIN_OPS_MCP_BOOTSTRAP_ADMIN_PASSWORD", "OPS_MCP_BOOTSTRAP_ADMIN_PASSWORD", "MCP_BOOTSTRAP_ADMIN_PASSWORD"); password != "" {
+		cfg.BootstrapAdminPassword = password
 	}
 
 	return cfg

@@ -7,7 +7,7 @@ Go-based Darwin Ops MCP platform with a React + TypeScript + Vite frontend. The 
 ## What is included
 
 - Go backend using Gin
-- React + TypeScript + Vite frontend using Ant Design, TanStack Query, React Router, ECharts, and Monaco Editor
+- React + TypeScript + Vite frontend using Ant Design, TanStack Query, React Router, and ECharts
 - Docker Compose stack with exactly three app services: `backend`, `frontend`, and `postgres`
 - Seed data for mock mode
 - Tool Registry, Policy Engine, Audit System, Execution History, and Approval Flow skeleton
@@ -23,15 +23,15 @@ The easiest path is Docker. Install Docker Desktop or Docker Engine with the Com
 make docker-up
 ```
 
-This pulls the latest backend image when available, rebuilds the backend container from the GitHub-published binary without compiling Go locally, builds the frontend locally, and starts:
+This builds the backend container from the repository source with the multi-stage `Dockerfile.backend`, builds the frontend locally, and starts:
 
 - `backend` on port `8080`
 - `frontend` on port `5173`
 - `postgres` on port `5432`
 
-The backend binary is compiled by GitHub Actions (`.github/workflows/backend-image.yml`) and published to the rolling GitHub Release tag `backend-main` as `darwin-ops-mcp-linux-amd64` and `darwin-ops-mcp-linux-arm64`. `Dockerfile.backend` downloads that binary during Docker build, so deployment hosts can rebuild the backend container without a local Go toolchain or expensive `go build`. The same workflow also publishes `ghcr.io/zlylong/ops-mcp-backend:main`.
+The backend image is compiled from source during Docker build. GitHub Actions (`.github/workflows/backend-image.yml`) also publishes `ghcr.io/zlylong/ops-mcp-backend:main` with least-privilege permissions and pinned third-party actions.
 
-To force a local backend Docker rebuild from the GitHub-published binary:
+To force a local backend Docker rebuild from source:
 
 ```bash
 make docker-up-local-backend
@@ -71,7 +71,9 @@ The sidebar also includes **Agent Key Management**. When `DARWIN_OPS_MCP_API_TOK
 The sidebar also includes **JumpServer Management** for registering multiple JumpServer servers. Each entry stores a sanitized configuration: name, Base URL, version, authentication mode, status, and notes. Token, Private Token, Access Key Secret, and Session credentials are submitted only on create/update; list and detail responses expose only `hasCredential` and never echo plaintext secrets. This version implements multi-instance configuration and connectivity testing first, so future tool execution can route operations by JumpServer instance ID.
 
 
-There is no password login in this MVP. Use the built-in mock identity when executing tools:
+Default admin username: `admin`. Production deployments must set the first-login password with `DARWIN_OPS_MCP_BOOTSTRAP_ADMIN_PASSWORD`; only local mock/dev demo environments keep `admin1234` for first-run usability. Login entry: `/login`.
+
+When no authenticated user identity is available in mock/dev flows, tool execution may fall back to the built-in mock identity:
 
 - Actor: `mock.user`
 - Role: `viewer`

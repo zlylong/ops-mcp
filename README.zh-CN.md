@@ -7,7 +7,7 @@
 ## 包含内容
 
 - 使用 Gin 的 Go 后端
-- 使用 Ant Design、TanStack Query、React Router、ECharts 和 Monaco Editor 的 React + TypeScript + Vite 前端
+- 使用 Ant Design、TanStack Query、React Router 和 ECharts 的 React + TypeScript + Vite 前端
 - Docker Compose 栈，包含三个应用服务：`backend`、`frontend`、`postgres`
 - mock mode 种子数据
 - Tool Registry、Policy Engine、Audit System、Execution History 和 Approval Flow 骨架
@@ -74,7 +74,7 @@ http://localhost:5173
 - **个人中心**：查看/修改个人信息、修改密码
 - **用户管理**（Admin）：用户列表、新建、编辑、删除、密码重置
 
-默认管理员账号：`admin` / `admin1234`。登录入口：`/login`。
+默认管理员账号：`admin`。生产环境必须通过 `DARWIN_OPS_MCP_BOOTSTRAP_ADMIN_PASSWORD` 设置首次登录密码；仅本地 mock/dev 演示环境保留 `admin1234`。登录入口：`/login`。
 
 执行工具时若无用户身份，使用内置 mock 身份：
 

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -16,39 +17,66 @@ import (
 // ssrfBlocklist hosts and IP ranges that are forbidden as JumpServer targets
 // to prevent SSRF attacks against cloud metadata services and internal networks.
 var ssrfBlocklist = []net.IPNet{
-	// Loopback
+	// IPv4 loopback, link-local, private, CGNAT, and unspecified ranges.
 	{Mask: net.CIDRMask(8, 32), IP: net.IP{127, 0, 0, 0}},
-	// Link-local (169.254.x.x) — used by cloud metadata services
 	{Mask: net.CIDRMask(16, 32), IP: net.IP{169, 254, 0, 0}},
-	// Private 10.0.0.0/8
 	{Mask: net.CIDRMask(8, 32), IP: net.IP{10, 0, 0, 0}},
-	// Private 172.16.0.0/12
 	{Mask: net.CIDRMask(12, 32), IP: net.IP{172, 16, 0, 0}},
-	// Private 192.168.0.0/16
 	{Mask: net.CIDRMask(16, 32), IP: net.IP{192, 168, 0, 0}},
-	// CGNAT 100.64.0.0/10 (carrier-grade NAT)
 	{Mask: net.CIDRMask(10, 32), IP: net.IP{100, 64, 0, 0}},
-	// Any IP (0.0.0.0/0 already blocked by being non-routable, kept for explicitness)
+	{Mask: net.CIDRMask(8, 32), IP: net.IP{0, 0, 0, 0}},
+	// IPv6 loopback, unspecified, unique-local, and link-local ranges.
+	{Mask: net.CIDRMask(128, 128), IP: net.ParseIP("::1")},
+	{Mask: net.CIDRMask(128, 128), IP: net.ParseIP("::")},
+	{Mask: net.CIDRMask(7, 128), IP: net.ParseIP("fc00::")},
+	{Mask: net.CIDRMask(10, 128), IP: net.ParseIP("fe80::")},
 }
 
-// isSSRFHost returns true if the host is known to be an internal/metadata address.
-func isSSRFHost(host string) bool {
-	// Check raw hostname strings used by cloud metadata services.
-	host = strings.ToLower(strings.TrimSpace(host))
-	switch host {
-	case "localhost", "metadata.google.internal", "metadata.internal":
+func isBlockedProbeIP(ip net.IP) bool {
+	if ip == nil {
 		return true
 	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return false
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
 	}
 	for _, block := range ssrfBlocklist {
 		if block.Contains(ip) {
 			return true
 		}
 	}
-	return false
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
+}
+
+// isSSRFHost returns true if the literal host is known to be internal/metadata.
+func isSSRFHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	switch host {
+	case "localhost", "metadata.google.internal", "metadata.internal":
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && isBlockedProbeIP(ip)
+}
+
+func resolvePublicProbeHost(ctx context.Context, host string) ([]net.IPAddr, error) {
+	if isSSRFHost(host) {
+		return nil, errors.New("probe URL host is in the SSRF blocklist")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return []net.IPAddr{{IP: ip}}, nil
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	ips, err := net.DefaultResolver.LookupIPAddr(lookupCtx, host)
+	if err != nil || len(ips) == 0 {
+		return nil, errors.New("probe URL host could not be resolved")
+	}
+	for _, ip := range ips {
+		if isBlockedProbeIP(ip.IP) {
+			return nil, fmt.Errorf("probe URL host resolves to blocked address %s", ip.IP.String())
+		}
+	}
+	return ips, nil
 }
 
 // isAllowedProbePort returns true if the port is allowed for connectivity probes.
@@ -57,21 +85,10 @@ func isAllowedProbePort(port int) bool {
 	return port == 80 || port == 443
 }
 
-// validateProbeURL checks a full URL for SSRF readiness.
-// It ensures the scheme is http/https, the port is 80 or 443, and the host
-// is not in the SSRF blocklist. Returns an error describing the violation.
-func validateProbeURL(rawURL string) error {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return errors.New("invalid probe URL")
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return errors.New("probe URL scheme must be http or https")
-	}
-	host, port, err := net.SplitHostPort(parsed.Host)
-	if err != nil {
-		// If no port in URL, net.SplitHostPort returns an error and host=parsed.Host.
-		host = parsed.Host
+func splitProbeHostPort(parsed *url.URL) (string, string, error) {
+	host := parsed.Hostname()
+	port := parsed.Port()
+	if port == "" {
 		if parsed.Scheme == "https" {
 			port = "443"
 		} else {
@@ -79,15 +96,59 @@ func validateProbeURL(rawURL string) error {
 		}
 	}
 	if host == "" {
-		return errors.New("probe URL has no host")
+		return "", "", errors.New("probe URL has no host")
 	}
 	if !isAllowedProbePort(portFromString(port)) {
-		return errors.New("probe URL port must be 80 or 443")
+		return "", "", errors.New("probe URL port must be 80 or 443")
 	}
-	if isSSRFHost(host) {
-		return errors.New("probe URL host is in the SSRF blocklist")
+	return host, port, nil
+}
+
+// validateProbeURL checks a full URL for SSRF readiness.
+// It ensures the scheme is http/https, the port is 80 or 443, and the host
+// is neither blocked directly nor resolvable to blocked IP ranges.
+func validateProbeURL(ctx context.Context, rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return errors.New("invalid probe URL")
 	}
-	return nil
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("probe URL scheme must be http or https")
+	}
+	host, _, err := splitProbeHostPort(parsed)
+	if err != nil {
+		return err
+	}
+	_, err = resolvePublicProbeHost(ctx, host)
+	return err
+}
+
+func safeProbeHTTPClient() *http.Client {
+	dialer := &net.Dialer{Timeout: 3 * time.Second}
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(address)
+			if err != nil {
+				return nil, err
+			}
+			ips, err := resolvePublicProbeHost(ctx, host)
+			if err != nil {
+				return nil, err
+			}
+			return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+		},
+	}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   3 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return errors.New("too many redirects")
+			}
+			return validateProbeURL(req.Context(), req.URL.String())
+		},
+	}
 }
 
 func portFromString(s string) int {
@@ -114,7 +175,7 @@ func normalizeJumpServerURL(raw string) (string, error) {
 		return "", errors.New("baseUrl scheme must be http or https")
 	}
 	// Enforce SSRF protection on the stored BaseURL as well.
-	if err := validateProbeURL(raw); err != nil {
+	if err := validateProbeURL(context.Background(), raw); err != nil {
 		return "", errors.New("baseUrl: " + err.Error())
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
@@ -261,7 +322,7 @@ func (s *Server) testJumpServer(c *gin.Context) {
 	probeURL := strings.TrimRight(item.BaseURL, "/") + "/api/docs/"
 
 	// Defence-in-depth: validate the URL before probing.
-	if err := validateProbeURL(probeURL); err != nil {
+	if err := validateProbeURL(ctx, probeURL); err != nil {
 		_, _ = s.registry.JumpServers().MarkChecked(id, "unreachable", checkedAt)
 		c.JSON(http.StatusOK, domain.JumpServerConnectionCheck{ID: item.ID, Name: item.Name, BaseURL: item.BaseURL, Reachable: false, Status: "unreachable", Message: "ssrf blocked: " + err.Error(), CheckedAt: checkedAt})
 		return
@@ -272,7 +333,7 @@ func (s *Server) testJumpServer(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := safeProbeHTTPClient().Do(req)
 	if err != nil {
 		_, _ = s.registry.JumpServers().MarkChecked(id, "unreachable", checkedAt)
 		c.JSON(http.StatusOK, domain.JumpServerConnectionCheck{ID: item.ID, Name: item.Name, BaseURL: item.BaseURL, Reachable: false, Status: "unreachable", Message: err.Error(), CheckedAt: checkedAt})

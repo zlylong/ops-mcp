@@ -48,6 +48,18 @@ The HTTP and MCP execution APIs never trust caller-supplied identity or approval
 
 - CORS preflight intentionally does not allow `Authorization` or `X-Actor` headers.
 - GitHub Actions workflows should use least-privilege permissions and pin third-party actions to immutable commit SHAs.
+- Frontend dependencies must be pinned to concrete semver ranges and `npm audit --audit-level=moderate` should pass before release.
+- Backend container images are built from the repository source in a multi-stage Dockerfile instead of downloading mutable remote binaries at image build time.
+
+## Login and bootstrap credentials
+
+- Password login is public by route, but successful login returns a server-recognized `user:<id>` Bearer token and failed attempts are rate-limited.
+- Production startup requires both `DARWIN_OPS_MCP_API_TOKEN` and `DARWIN_OPS_MCP_BOOTSTRAP_ADMIN_PASSWORD`.
+- The demo `admin1234` bootstrap password is only kept for non-production mock/dev first-run usability.
+
+## JumpServer SSRF protection
+
+JumpServer Base URLs and connectivity probes are restricted to `http`/`https` on ports 80/443. Hosts are checked as literals and by DNS resolution, blocked if they resolve to loopback, private, link-local, CGNAT, metadata, unspecified, or IPv6 ULA/link-local addresses. Probe redirects are revalidated before following.
 
 ## Audit masking
 

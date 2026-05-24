@@ -1,24 +1,15 @@
+FROM golang:1.25-bookworm AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY backend ./backend
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/darwin-ops-mcp ./backend/cmd/server
+
 FROM debian:13-slim
-
-ARG TARGETARCH
-ARG BACKEND_BINARY_BASE_URL=https://github.com/zlylong/darwin-ops-mcp/releases/download/backend-main
-ARG BACKEND_BINARY_NAME=darwin-ops-mcp-linux-${TARGETARCH}
-ARG BACKEND_BINARY_URL=${BACKEND_BINARY_BASE_URL}/${BACKEND_BINARY_NAME}
-
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl openssh-client \
+    && apt-get install -y --no-install-recommends ca-certificates openssh-client iputils-ping systemd \
     && rm -rf /var/lib/apt/lists/*
-
-RUN set -eux; \
-    case "${TARGETARCH}" in \
-        amd64|arm64) ;; \
-        *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL --retry 5 --retry-delay 2 --connect-timeout 10 \
-        -o /usr/local/bin/darwin-ops-mcp \
-        "${BACKEND_BINARY_URL}"; \
-    chmod +x /usr/local/bin/darwin-ops-mcp
-
+COPY --from=build /out/darwin-ops-mcp /usr/local/bin/darwin-ops-mcp
 ENV DARWIN_OPS_MCP_ADDR=:8080 DARWIN_OPS_MCP_MODE=mock DARWIN_OPS_MCP_SEED_MOCK=true
 EXPOSE 8080
 CMD ["darwin-ops-mcp"]

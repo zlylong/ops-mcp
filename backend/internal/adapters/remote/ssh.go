@@ -25,8 +25,11 @@ func (a *SSHAdapter) Command(ctx context.Context, params map[string]any) (map[st
 	if host == "" {
 		return nil, errors.New("host is required")
 	}
-	if strings.ContainsAny(host, " \t\n\r/") {
+	if strings.ContainsAny(host, " \t\n\r/") || strings.HasPrefix(host, "-") {
 		return nil, errors.New("host contains invalid characters")
+	}
+	if strings.ContainsAny(user, " \t\n\r/@") || strings.HasPrefix(user, "-") {
+		return nil, errors.New("user contains invalid characters")
 	}
 	if command == "" {
 		return nil, errors.New("command is required")

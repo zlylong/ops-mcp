@@ -166,7 +166,7 @@ docker compose up -d --force-recreate backend
 
 ### Backend exits with PostgreSQL authentication errors
 
-Local adapter mode should use in-memory stores. If it tries to connect to PostgreSQL, confirm the running binary includes the local-mode fix and rebuild from the latest GitHub Release binary:
+Local adapter mode should use in-memory stores. If it tries to connect to PostgreSQL, confirm the running binary includes the local-mode fix and rebuild from the repository source with the current Dockerfile:
 
 ```bash
 docker compose build --no-cache backend
