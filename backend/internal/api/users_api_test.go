@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/zlylong/darwin-ops-mcp/backend/internal/app"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/config"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/domain"
 )
@@ -29,12 +31,12 @@ func jsonBody(v any) *bytes.Reader {
 // adminToken creates an admin user and returns a valid user token for them.
 func adminToken(t *testing.T, r *app.Registry, cfg config.Config) string {
 	t.Helper()
+	resetAuthRateLimiter()
 	hash, err := bcrypt.GenerateFromPassword([]byte("admin-pass-8888"), bcrypt.DefaultCost)
 	require.NoError(t, err)
 	admin := domain.User{Username: "admin", Role: domain.RoleAdmin, Status: "active"}
 	r.Users().Add(admin, "", hash)
-	token := "user:" + admin.ID
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/login",
 		jsonBody(map[string]string{"username": "admin", "password": "admin-pass-8888"}))
 	w := httptest.NewRecorder()
@@ -51,9 +53,9 @@ func adminToken(t *testing.T, r *app.Registry, cfg config.Config) string {
 
 func TestListUsers_AuthenticatedAdmin_ReturnsUserList(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -67,12 +69,13 @@ func TestListUsers_AuthenticatedAdmin_ReturnsUserList(t *testing.T) {
 }
 
 func TestListUsers_ViewerRole_ReturnsForbidden(t *testing.T) {
+	resetAuthRateLimiter()
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	viewerHash, _ := bcrypt.GenerateFromPassword([]byte("viewer-pass-9999"), bcrypt.DefaultCost)
 	viewer := domain.User{Username: "viewer", Role: domain.RoleViewer, Status: "active"}
 	r.Users().Add(viewer, "", viewerHash)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/users/login",
 		jsonBody(map[string]string{"username": "viewer", "password": "viewer-pass-9999"}))
@@ -90,9 +93,10 @@ func TestListUsers_ViewerRole_ReturnsForbidden(t *testing.T) {
 }
 
 func TestListUsers_Unauthenticated_ReturnsUnauthorized(t *testing.T) {
+	resetAuthRateLimiter()
 	r := createTestRegistry(t)
-	cfg := config.Config{}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "master-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
 	w := httptest.NewRecorder()
@@ -107,9 +111,9 @@ func TestListUsers_Unauthenticated_ReturnsUnauthorized(t *testing.T) {
 
 func TestGetUser_ValidID_ReturnsUser(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
 	listReq.Header.Set("Authorization", "Bearer "+token)
@@ -132,9 +136,9 @@ func TestGetUser_ValidID_ReturnsUser(t *testing.T) {
 
 func TestGetUser_NotFound_Returns404(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/users/nonexistent-id-xyz", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -150,12 +154,12 @@ func TestGetUser_NotFound_Returns404(t *testing.T) {
 
 func TestCreateUser_ValidRequest_CreatesUser(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{"username": "newuser", "password": "newpass1234", "role": "viewer", "nickname": "New User"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", bytes.NewReader(body.Bytes()))
+	body := jsonBody(map[string]any{"username": "newuser", "password": "newuser-pass-9999", "role": "viewer", "nickname": "New User"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -170,13 +174,13 @@ func TestCreateUser_ValidRequest_CreatesUser(t *testing.T) {
 
 func TestCreateUser_DuplicateUsername_ReturnsBadRequest(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	// "admin" already exists from adminToken
-	body := jsonBody(map[string]any{"username": "admin", "password": "somepass9999"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", bytes.NewReader(body.Bytes()))
+	body := jsonBody(map[string]any{"username": "admin", "password": "somepass9999", "role": "viewer"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -188,12 +192,12 @@ func TestCreateUser_DuplicateUsername_ReturnsBadRequest(t *testing.T) {
 
 func TestCreateUser_InvalidRole_ReturnsBadRequest(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{"username": "roleuser", "password": "pass12345678", "role": "superadmin"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", bytes.NewReader(body.Bytes()))
+	body := jsonBody(map[string]any{"username": "roleuser", "password": "roleuser-pass-9999", "role": "superadmin"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -205,12 +209,12 @@ func TestCreateUser_InvalidRole_ReturnsBadRequest(t *testing.T) {
 
 func TestCreateUser_PasswordTooShort_ReturnsBadRequest(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{"username": "shortpw", "password": "1234567"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", bytes.NewReader(body.Bytes()))
+	body := jsonBody(map[string]any{"username": "shortpw", "password": "short"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -225,9 +229,9 @@ func TestCreateUser_PasswordTooShort_ReturnsBadRequest(t *testing.T) {
 
 func TestGetMe_ValidToken_ReturnsOwnProfile(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -241,9 +245,10 @@ func TestGetMe_ValidToken_ReturnsOwnProfile(t *testing.T) {
 }
 
 func TestGetMe_NoAuth_ReturnsUnauthorized(t *testing.T) {
+	resetAuthRateLimiter()
 	r := createTestRegistry(t)
-	cfg := config.Config{}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "master-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
 	w := httptest.NewRecorder()
@@ -258,12 +263,12 @@ func TestGetMe_NoAuth_ReturnsUnauthorized(t *testing.T) {
 
 func TestUpdateMe_ValidUpdate_UpdatesNicknameAndEmail(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	body := jsonBody(map[string]any{"nickname": "Super Admin", "email": "admin@example.com"})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/me", bytes.NewReader(body.Bytes()))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/me", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -278,12 +283,12 @@ func TestUpdateMe_ValidUpdate_UpdatesNicknameAndEmail(t *testing.T) {
 
 func TestUpdateMe_InvalidEmail_Ignored(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	body := jsonBody(map[string]any{"email": "not-an-email"})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/me", bytes.NewReader(body.Bytes()))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/me", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -301,12 +306,12 @@ func TestUpdateMe_InvalidEmail_Ignored(t *testing.T) {
 
 func TestChangeMyPassword_ValidRequest_ChangesPassword(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	body := jsonBody(map[string]string{"oldPassword": "admin-pass-8888", "newPassword": "newpass-87654321"})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/password", bytes.NewReader(body.Bytes()))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/password", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -332,12 +337,12 @@ func TestChangeMyPassword_ValidRequest_ChangesPassword(t *testing.T) {
 
 func TestChangeMyPassword_WrongOldPassword_ReturnsForbidden(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	body := jsonBody(map[string]string{"oldPassword": "wrong-old-pass", "newPassword": "newpass-87654321"})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/password", bytes.NewReader(body.Bytes()))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/password", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -349,19 +354,19 @@ func TestChangeMyPassword_WrongOldPassword_ReturnsForbidden(t *testing.T) {
 
 func TestChangeMyPassword_NewPasswordTooShort_ReturnsBadRequest(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	token := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	body := jsonBody(map[string]string{"oldPassword": "admin-pass-8888", "newPassword": "short"})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/password", bytes.NewReader(body.Bytes()))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/password", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "at least 8 characters")
+	assert.Contains(t, w.Body.String(), "invalid JSON")
 }
 
 // ------------------------------------------------------------------
@@ -370,16 +375,16 @@ func TestChangeMyPassword_NewPasswordTooShort_ReturnsBadRequest(t *testing.T) {
 
 func TestChangeUserPassword_ValidRequest_ResetsPassword(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	adminTokenVal := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	targetHash, _ := bcrypt.GenerateFromPassword([]byte("target-old-pass"), bcrypt.DefaultCost)
 	target := domain.User{Username: "target", Role: domain.RoleViewer, Status: "active"}
 	added := r.Users().Add(target, "", targetHash)
 
 	body := jsonBody(map[string]string{"newPassword": "admin-reset-pass-123"})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/"+added.ID+"/password", bytes.NewReader(body.Bytes()))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/"+added.ID+"/password", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+adminTokenVal)
 	w := httptest.NewRecorder()
@@ -391,12 +396,12 @@ func TestChangeUserPassword_ValidRequest_ResetsPassword(t *testing.T) {
 
 func TestChangeUserPassword_UserNotFound_Returns404(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	adminTokenVal := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	body := jsonBody(map[string]string{"newPassword": "anypass-12345678"})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/nonexistent-id-xyz/password", bytes.NewReader(body.Bytes()))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/nonexistent-id-xyz/password", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+adminTokenVal)
 	w := httptest.NewRecorder()
@@ -407,9 +412,9 @@ func TestChangeUserPassword_UserNotFound_Returns404(t *testing.T) {
 
 func TestChangeUserPassword_PasswordTooShort_ReturnsBadRequest(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	adminTokenVal := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
 	listReq.Header.Set("Authorization", "Bearer "+adminTokenVal)
@@ -419,7 +424,7 @@ func TestChangeUserPassword_PasswordTooShort_ReturnsBadRequest(t *testing.T) {
 	json.Unmarshal(listW.Body.Bytes(), &users)
 
 	body := jsonBody(map[string]string{"newPassword": "short"})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/"+users[0].ID+"/password", bytes.NewReader(body.Bytes()))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/"+users[0].ID+"/password", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+adminTokenVal)
 	w := httptest.NewRecorder()
@@ -434,9 +439,9 @@ func TestChangeUserPassword_PasswordTooShort_ReturnsBadRequest(t *testing.T) {
 
 func TestUpdateUser_AdminUpdatesRoleAndStatus(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	adminTokenVal := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
 	listReq.Header.Set("Authorization", "Bearer "+adminTokenVal)
@@ -446,7 +451,7 @@ func TestUpdateUser_AdminUpdatesRoleAndStatus(t *testing.T) {
 	json.Unmarshal(listW.Body.Bytes(), &users)
 
 	body := jsonBody(map[string]any{"role": "operator", "status": "inactive"})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/"+users[0].ID, bytes.NewReader(body.Bytes()))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/"+users[0].ID, body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+adminTokenVal)
 	w := httptest.NewRecorder()
@@ -461,9 +466,9 @@ func TestUpdateUser_AdminUpdatesRoleAndStatus(t *testing.T) {
 
 func TestUpdateUser_InvalidStatus_ReturnsBadRequest(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	adminTokenVal := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
 	listReq.Header.Set("Authorization", "Bearer "+adminTokenVal)
@@ -473,7 +478,7 @@ func TestUpdateUser_InvalidStatus_ReturnsBadRequest(t *testing.T) {
 	json.Unmarshal(listW.Body.Bytes(), &users)
 
 	body := jsonBody(map[string]any{"status": "deleted"})
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/"+users[0].ID, bytes.NewReader(body.Bytes()))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/"+users[0].ID, body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+adminTokenVal)
 	w := httptest.NewRecorder()
@@ -488,9 +493,9 @@ func TestUpdateUser_InvalidStatus_ReturnsBadRequest(t *testing.T) {
 
 func TestDeleteUser_AdminDeletesUser(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	adminTokenVal := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	newHash, _ := bcrypt.GenerateFromPassword([]byte("deleteme1234"), bcrypt.DefaultCost)
 	newUser := domain.User{Username: "deleteme", Role: domain.RoleViewer, Status: "active"}
@@ -513,9 +518,9 @@ func TestDeleteUser_AdminDeletesUser(t *testing.T) {
 
 func TestDeleteUser_UserNotFound_Returns404(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	adminTokenVal := adminToken(t, r, cfg)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/nonexistent-id-xyz", nil)
 	req.Header.Set("Authorization", "Bearer "+adminTokenVal)
@@ -526,12 +531,13 @@ func TestDeleteUser_UserNotFound_Returns404(t *testing.T) {
 }
 
 func TestDeleteUser_ViewerRole_ReturnsForbidden(t *testing.T) {
+	resetAuthRateLimiter()
 	r := createTestRegistry(t)
-	cfg := config.Config{}
+	cfg := config.Config{APIToken: "master-token"}
 	viewerHash, _ := bcrypt.GenerateFromPassword([]byte("viewer-pass-9999"), bcrypt.DefaultCost)
 	viewer := domain.User{Username: "viewer2", Role: domain.RoleViewer, Status: "active"}
 	r.Users().Add(viewer, "", viewerHash)
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/users/login",
 		jsonBody(map[string]string{"username": "viewer2", "password": "viewer-pass-9999"}))

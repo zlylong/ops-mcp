@@ -16,7 +16,7 @@ import (
 )
 
 func TestLoginReturnsUsableUserBearerToken(t *testing.T) {
-	registry := createTestRegistry()
+	registry := createTestRegistry(t)
 	hash, err := bcrypt.GenerateFromPassword([]byte("correct horse battery staple"), bcrypt.DefaultCost)
 	require.NoError(t, err)
 	user := registry.Users().Add(domain.User{Username: "alice", Nickname: "Alice", Role: domain.RoleAdmin, Status: "active"}, "", hash)

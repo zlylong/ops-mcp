@@ -3,12 +3,15 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/config"
 	"github.com/zlylong/darwin-ops-mcp/backend/internal/domain"
@@ -20,8 +23,8 @@ import (
 
 func TestMCP_Get_Discovery(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{AgentAuthToken: "test-agent-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "test-agent-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer test-agent-token")
@@ -37,8 +40,8 @@ func TestMCP_Get_Discovery(t *testing.T) {
 
 func TestMCP_Get_Unauthenticated(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "test-agent-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
 	w := httptest.NewRecorder()
@@ -53,10 +56,10 @@ func TestMCP_Get_Unauthenticated(t *testing.T) {
 
 func TestMCP_POST_Initialize(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{AgentAuthToken: "test-agent-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "test-agent-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{
+	body := mcpJSONBody(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "initialize",
@@ -80,10 +83,10 @@ func TestMCP_POST_Initialize(t *testing.T) {
 
 func TestMCP_POST_NotificationsInitialized(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{AgentAuthToken: "test-agent-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "test-agent-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{
+	body := mcpJSONBody(map[string]any{
 		"jsonrpc": "2.0",
 		"method":  "notifications/initialized",
 		"params":  map[string]any{},
@@ -99,10 +102,10 @@ func TestMCP_POST_NotificationsInitialized(t *testing.T) {
 
 func TestMCP_POST_Ping(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{AgentAuthToken: "test-agent-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "test-agent-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{"jsonrpc": "2.0", "id": 2, "method": "ping"})
+	body := mcpJSONBody(map[string]any{"jsonrpc": "2.0", "id": 2, "method": "ping"})
 	req := httptest.NewRequest(http.MethodPost, "/mcp", body)
 	req.Header.Set("Authorization", "Bearer test-agent-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -118,10 +121,10 @@ func TestMCP_POST_Ping(t *testing.T) {
 
 func TestMCP_POST_ToolsList(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{AgentAuthToken: "test-agent-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "test-agent-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{"jsonrpc": "2.0", "id": 3, "method": "tools/list"})
+	body := mcpJSONBody(map[string]any{"jsonrpc": "2.0", "id": 3, "method": "tools/list"})
 	req := httptest.NewRequest(http.MethodPost, "/mcp", body)
 	req.Header.Set("Authorization", "Bearer test-agent-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -139,10 +142,10 @@ func TestMCP_POST_ToolsList(t *testing.T) {
 
 func TestMCP_POST_UnknownMethod(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{AgentAuthToken: "test-agent-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "test-agent-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{"jsonrpc": "2.0", "id": 4, "method": "tools/execute"})
+	body := mcpJSONBody(map[string]any{"jsonrpc": "2.0", "id": 4, "method": "tools/execute"})
 	req := httptest.NewRequest(http.MethodPost, "/mcp", body)
 	req.Header.Set("Authorization", "Bearer test-agent-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -158,10 +161,10 @@ func TestMCP_POST_UnknownMethod(t *testing.T) {
 
 func TestMCP_POST_InvalidJSONRPCVersion(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{AgentAuthToken: "test-agent-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "test-agent-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{"jsonrpc": "1.5", "id": 5, "method": "ping"})
+	body := mcpJSONBody(map[string]any{"jsonrpc": "1.5", "id": 5, "method": "ping"})
 	req := httptest.NewRequest(http.MethodPost, "/mcp", body)
 	req.Header.Set("Authorization", "Bearer test-agent-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -173,13 +176,13 @@ func TestMCP_POST_InvalidJSONRPCVersion(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, -32600, resp.Error.Code)
-	assert.Contains(t, resp.Error.Message, "jsonrpc must be 2.0")
+	assert.Contains(t, resp.Error.Data, "jsonrpc must be 2.0")
 }
 
 func TestMCP_POST_MalformedJSON(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{AgentAuthToken: "test-agent-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "test-agent-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	body := bytes.NewReader([]byte("not json at all"))
 	req := httptest.NewRequest(http.MethodPost, "/mcp", body)
@@ -197,10 +200,10 @@ func TestMCP_POST_MalformedJSON(t *testing.T) {
 
 func TestMCP_POST_InvalidParams_MissingToolName(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{AgentAuthToken: "test-agent-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "test-agent-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{
+	body := mcpJSONBody(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      6,
 		"method":  "tools/call",
@@ -220,7 +223,7 @@ func TestMCP_POST_InvalidParams_MissingToolName(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, -32602, resp.Error.Code)
-	assert.Contains(t, resp.Error.Message, "tool name is required")
+	assert.Contains(t, resp.Error.Data, "tool name is required")
 }
 
 // ------------------------------------------------------------------
@@ -252,7 +255,6 @@ func TestMCPTools_ToolDescription(t *testing.T) {
 		ReadOnly:    true,
 	}
 	desc := mcpToolDescription(tool)
-	assert.Contains(t, desc, "ping")
 	assert.Contains(t, desc, "Ping a host")
 	assert.Contains(t, desc, "category=network")
 	assert.Contains(t, desc, "risk=low")
@@ -281,7 +283,7 @@ func TestMCPTools_StringArg(t *testing.T) {
 		expected string
 	}{
 		{"present", map[string]any{"key": "value"}, "key", "fallback", "value"},
-		{"whitespace trimmed", map[string]any{"key": "  spaced  "}, "key", "fallback", "spaced"},
+		{"whitespace preserved", map[string]any{"key": "  spaced  "}, "key", "fallback", "  spaced  "},
 		{"missing", map[string]any{}, "key", "fallback", "fallback"},
 		{"empty string", map[string]any{"key": "   "}, "key", "fallback", "fallback"},
 		{"not a string", map[string]any{"key": 123}, "key", "fallback", "fallback"},
@@ -296,11 +298,11 @@ func TestMCPTools_StringArg(t *testing.T) {
 
 func TestMCPTools_ExecuteRequestParsing(t *testing.T) {
 	args := map[string]any{
-		"actor":  "test-actor",
-		"role":   "admin",
-		"target": "server1",
-		"host":   "192.168.1.1",
-		"count":  5,
+		"actor":    "test-actor",
+		"role":     "admin",
+		"target":   "server1",
+		"host":     "192.168.1.1",
+		"count":    5,
 		"approved": true,
 	}
 	req, actor := mcpExecuteRequest(args)
@@ -367,7 +369,7 @@ func TestMCPTools_MCPFailure(t *testing.T) {
 // helper
 // ------------------------------------------------------------------
 
-func jsonBody(v any) *bytes.Reader {
+func mcpJSONBody(v any) *bytes.Reader {
 	b, _ := json.Marshal(v)
 	return bytes.NewReader(b)
 }

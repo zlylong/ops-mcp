@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -20,9 +21,9 @@ import (
 func TestCreateAgentAPIKey_ValidRequest_ReturnsKey(t *testing.T) {
 	r := createTestRegistry(t)
 	cfg := config.Config{APIToken: "master-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{
+	body := agentJSONBody(map[string]any{
 		"name":         "opsagent topic 436",
 		"actor":        "opsagent-topic-436",
 		"role":         "viewer",
@@ -40,7 +41,7 @@ func TestCreateAgentAPIKey_ValidRequest_ReturnsKey(t *testing.T) {
 	var key map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &key))
 	assert.NotEmpty(t, key["id"])
-	assert.NotEmpty(t, key["key"])
+	assert.NotEmpty(t, key["secret"])
 	assert.Equal(t, "opsagent topic 436", key["name"])
 	assert.Equal(t, "opsagent-topic-436", key["actor"])
 	assert.Equal(t, "viewer", key["role"])
@@ -49,9 +50,9 @@ func TestCreateAgentAPIKey_ValidRequest_ReturnsKey(t *testing.T) {
 func TestCreateAgentAPIKey_NoMasterToken_ReturnsForbidden(t *testing.T) {
 	r := createTestRegistry(t)
 	cfg := config.Config{APIToken: "master-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
-	body := jsonBody(map[string]any{"name": "test", "actor": "test", "role": "viewer", "scopes": []string{}, "expiresInHrs": 24})
+	body := agentJSONBody(map[string]any{"name": "test", "actor": "test", "role": "viewer", "scopes": []string{}, "expiresInHrs": 24})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent-keys", body)
 	req.Header.Set("Authorization", "Bearer wrong-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -64,7 +65,7 @@ func TestCreateAgentAPIKey_NoMasterToken_ReturnsForbidden(t *testing.T) {
 func TestCreateAgentAPIKey_EmptyBody_ReturnsBadRequest(t *testing.T) {
 	r := createTestRegistry(t)
 	cfg := config.Config{APIToken: "master-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent-keys", bytes.NewReader([]byte("{}")))
 	req.Header.Set("Authorization", "Bearer master-token")
@@ -85,10 +86,10 @@ func TestCreateAgentAPIKey_EmptyBody_ReturnsBadRequest(t *testing.T) {
 func TestListAgentAPIKeys_MasterToken_ReturnsKeys(t *testing.T) {
 	r := createTestRegistry(t)
 	cfg := config.Config{APIToken: "master-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	// First create a key
-	createBody := jsonBody(map[string]any{
+	createBody := agentJSONBody(map[string]any{
 		"name": "test-key", "actor": "test-actor", "role": "viewer",
 		"scopes": []string{"tools:execute"}, "expiresInHrs": 24,
 	})
@@ -113,8 +114,8 @@ func TestListAgentAPIKeys_MasterToken_ReturnsKeys(t *testing.T) {
 
 func TestListAgentAPIKeys_NoAuth_ReturnsUnauthorized(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "master-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent-keys", nil)
 	w := httptest.NewRecorder()
@@ -130,10 +131,10 @@ func TestListAgentAPIKeys_NoAuth_ReturnsUnauthorized(t *testing.T) {
 func TestRevokeAgentAPIKey_ValidKey_Revokes(t *testing.T) {
 	r := createTestRegistry(t)
 	cfg := config.Config{APIToken: "master-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	// Create a key first
-	createBody := jsonBody(map[string]any{
+	createBody := agentJSONBody(map[string]any{
 		"name": "revoke-me", "actor": "actor-revoke", "role": "viewer",
 		"scopes": []string{"tools:execute"}, "expiresInHrs": 24,
 	})
@@ -163,7 +164,7 @@ func TestRevokeAgentAPIKey_ValidKey_Revokes(t *testing.T) {
 func TestRevokeAgentAPIKey_NotFound_Returns404(t *testing.T) {
 	r := createTestRegistry(t)
 	cfg := config.Config{APIToken: "master-token"}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent-keys/nonexistent-key-id/revoke", nil)
 	req.Header.Set("Authorization", "Bearer master-token")
@@ -175,8 +176,8 @@ func TestRevokeAgentAPIKey_NotFound_Returns404(t *testing.T) {
 
 func TestRevokeAgentAPIKey_NoAuth_ReturnsUnauthorized(t *testing.T) {
 	r := createTestRegistry(t)
-	cfg := config.Config{}
-	router := NewRouter(cfg, r, &mockRecorder{}, nil)
+	cfg := config.Config{APIToken: "master-token"}
+	router := NewRouter(cfg, r, &mockRecorder{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent-keys/some-key/revoke", nil)
 	w := httptest.NewRecorder()
@@ -189,7 +190,7 @@ func TestRevokeAgentAPIKey_NoAuth_ReturnsUnauthorized(t *testing.T) {
 // helper
 // ------------------------------------------------------------------
 
-func jsonBody(v any) *bytes.Reader {
+func agentJSONBody(v any) *bytes.Reader {
 	b, _ := json.Marshal(v)
 	return bytes.NewReader(b)
 }
