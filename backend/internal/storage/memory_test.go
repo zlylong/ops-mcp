@@ -297,3 +297,120 @@ func TestExecutionStore_MixedReadWrite_Concurrent(t *testing.T) {
 	list := store.List()
 	assert.Len(t, list, 1)
 }
+
+func TestUserStore_CRUDAndPasswordHash(t *testing.T) {
+	store := NewUserStore()
+	hash := []byte("[REDACTED]")
+	created := store.Add(domain.User{Username: "alice", Nickname: "Alice", Role: domain.RoleAdmin, Status: "active"}, "ignored-plaintext", hash)
+
+	assert.NotEmpty(t, created.ID)
+	assert.False(t, created.CreatedAt.IsZero())
+	assert.False(t, created.UpdatedAt.IsZero())
+
+	listed := store.List()
+	assert.Len(t, listed, 1)
+	assert.Equal(t, "alice", listed[0].Username)
+
+	byID, ok := store.Get(created.ID)
+	assert.True(t, ok)
+	assert.Equal(t, created.ID, byID.ID)
+
+	byName, storedHash, ok := store.GetByUsername("alice")
+	assert.True(t, ok)
+	assert.Equal(t, created.ID, byName.ID)
+	assert.Equal(t, string(hash), storedHash)
+
+	err := store.Update(created.ID, func(u *domain.User) {
+		u.Nickname = "Alice Updated"
+		u.Email = "alice@example.test"
+	})
+	assert.NoError(t, err)
+	updated, ok := store.Get(created.ID)
+	assert.True(t, ok)
+	assert.Equal(t, "Alice Updated", updated.Nickname)
+	assert.Equal(t, "alice@example.test", updated.Email)
+	assert.True(t, !updated.UpdatedAt.Before(created.UpdatedAt))
+
+	err = store.SetPassword(created.ID, []byte("[REDACTED]"))
+	assert.NoError(t, err)
+	_, storedHash, ok = store.GetByUsername("alice")
+	assert.True(t, ok)
+	assert.Equal(t, "[REDACTED]", storedHash)
+
+	assert.NoError(t, store.Delete(created.ID))
+	_, ok = store.Get(created.ID)
+	assert.False(t, ok)
+	assert.Empty(t, store.List())
+}
+
+func TestUserStore_NotFoundBranches(t *testing.T) {
+	store := NewUserStore()
+	_, ok := store.Get("missing")
+	assert.False(t, ok)
+	_, _, ok = store.GetByUsername("missing")
+	assert.False(t, ok)
+	assert.Error(t, store.Update("missing", func(u *domain.User) {}))
+	assert.Error(t, store.SetPassword("missing", []byte("hash")))
+	assert.Error(t, store.Delete("missing"))
+}
+
+func TestJumpServerStore_CRUDSanitizesCredentials(t *testing.T) {
+	store := NewJumpServerStore()
+	created := store.Add(domain.JumpServerInstance{
+		Name:     "primary",
+		BaseURL:  "https://jump.example.test",
+		AuthType: domain.JumpServerAuthToken,
+	}, "[REDACTED]", "", "")
+
+	assert.NotEmpty(t, created.ID)
+	assert.Equal(t, "active", created.Status)
+	assert.True(t, created.HasCredential)
+	assert.False(t, created.CreatedAt.IsZero())
+	assert.False(t, created.UpdatedAt.IsZero())
+
+	listed := store.List()
+	assert.Len(t, listed, 1)
+	assert.Equal(t, created.ID, listed[0].ID)
+	assert.True(t, listed[0].HasCredential)
+
+	got, ok := store.Get(created.ID)
+	assert.True(t, ok)
+	assert.Equal(t, created.ID, got.ID)
+	assert.True(t, got.HasCredential)
+
+	updated, err := store.Update(created.ID, func(j *domain.JumpServerInstance) {
+		j.Name = "primary-updated"
+		j.Status = "inactive"
+	}, "", "[REDACTED]", "[REDACTED]")
+	assert.NoError(t, err)
+	assert.Equal(t, "primary-updated", updated.Name)
+	assert.Equal(t, "inactive", updated.Status)
+	assert.True(t, updated.HasCredential)
+
+	checkedAt := time.Now().UTC()
+	checked, err := store.MarkChecked(created.ID, "unreachable", checkedAt)
+	assert.NoError(t, err)
+	assert.Equal(t, "unreachable", checked.Status)
+	assert.NotNil(t, checked.LastCheckedAt)
+	assert.Equal(t, checkedAt, *checked.LastCheckedAt)
+
+	assert.NoError(t, store.Delete(created.ID))
+	_, ok = store.Get(created.ID)
+	assert.False(t, ok)
+}
+
+func TestJumpServerStore_NotFoundBranchesAndCredentialFlag(t *testing.T) {
+	store := NewJumpServerStore()
+	created := store.Add(domain.JumpServerInstance{ID: "fixed", Name: "no-creds", BaseURL: "https://jump.example.test", Status: "inactive"}, "", "", "")
+	assert.Equal(t, "fixed", created.ID)
+	assert.False(t, created.HasCredential)
+	assert.Equal(t, "inactive", created.Status)
+
+	_, ok := store.Get("missing")
+	assert.False(t, ok)
+	_, err := store.Update("missing", func(j *domain.JumpServerInstance) {}, "", "", "")
+	assert.Error(t, err)
+	_, err = store.MarkChecked("missing", "active", time.Now().UTC())
+	assert.Error(t, err)
+	assert.Error(t, store.Delete("missing"))
+}

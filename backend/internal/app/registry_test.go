@@ -350,3 +350,104 @@ func TestRegistry_ApproveApplicationCreatesRequestedTool(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "Requested custom tool", tool.Description)
 }
+
+func TestRegistry_AgentAPIKeyLifecycle(t *testing.T) {
+	registry := createTestRegistry()
+
+	created, err := registry.CreateAgentAPIKey(domain.AgentAPIKeyCreateRequest{
+		Name:         "ci-agent",
+		Actor:        "automation",
+		Role:         domain.RoleOperator,
+		Reason:       "coverage regression",
+		Scopes:       []string{"tools:execute"},
+		ExpiresInHrs: 1,
+	})
+	assert.NoError(t, err)
+	assert.NotEmpty(t, created.ID)
+	assert.NotEmpty(t, created.Secret)
+	assert.Equal(t, "ci-agent", created.Name)
+	assert.Equal(t, domain.RoleOperator, created.Role)
+	assert.NotNil(t, created.ExpiresAt)
+	assert.Equal(t, keyPrefix(created.Secret), created.KeyPrefix)
+	assert.Equal(t, hashAgentAPISecret(created.Secret), hashAgentAPISecret(created.Secret))
+
+	listed := registry.AgentAPIKeys()
+	assert.Len(t, listed, 1)
+	assert.Equal(t, created.ID, listed[0].ID)
+	assert.Empty(t, listed[0].RevokedAt)
+
+	authenticated, ok := registry.AuthenticateAgentAPIKey(created.Secret)
+	assert.True(t, ok)
+	assert.Equal(t, created.ID, authenticated.ID)
+	assert.NotNil(t, authenticated.LastUsedAt)
+
+	_, ok = registry.AuthenticateAgentAPIKey("[REDACTED]")
+	assert.False(t, ok)
+	_, ok = registry.AuthenticateAgentAPIKey("   ")
+	assert.False(t, ok)
+
+	revoked, err := registry.RevokeAgentAPIKey(" " + created.ID + " ")
+	assert.NoError(t, err)
+	assert.Equal(t, "revoked", revoked.Status)
+	assert.NotNil(t, revoked.RevokedAt)
+	_, ok = registry.AuthenticateAgentAPIKey(created.Secret)
+	assert.False(t, ok)
+}
+
+func TestRegistry_AgentAPIKeyValidationAndExpiry(t *testing.T) {
+	registry := createTestRegistry()
+
+	_, err := registry.CreateAgentAPIKey(domain.AgentAPIKeyCreateRequest{Name: "", Actor: "agent", Role: domain.RoleViewer})
+	assert.ErrorContains(t, err, "name is required")
+	_, err = registry.CreateAgentAPIKey(domain.AgentAPIKeyCreateRequest{Name: "key", Actor: "", Role: domain.RoleViewer})
+	assert.ErrorContains(t, err, "actor is required")
+	_, err = registry.CreateAgentAPIKey(domain.AgentAPIKeyCreateRequest{Name: "key", Actor: "agent", Role: domain.Role("owner")})
+	assert.ErrorContains(t, err, "role")
+
+	expired, err := registry.CreateAgentAPIKey(domain.AgentAPIKeyCreateRequest{Name: "expired", Actor: "agent", Role: domain.RoleViewer, ExpiresInHrs: -1})
+	assert.NoError(t, err)
+	_, ok := registry.AuthenticateAgentAPIKey(expired.Secret)
+	assert.True(t, ok, "negative ExpiresInHrs means non-expiring by current contract")
+
+	assert.ErrorContains(t, func() error { _, err := registry.RevokeAgentAPIKey(""); return err }(), "key id is required")
+	_, err = registry.RevokeAgentAPIKey("missing-key")
+	assert.ErrorIs(t, err, ErrAgentAPIKeyNotFound)
+}
+
+func TestRegistry_ApplicationsAndRejectApplication(t *testing.T) {
+	registry := createTestRegistry()
+
+	low := registry.SubmitApplication(domain.ToolApplicationRequest{Tool: "safe.tool", Risk: domain.RiskLow, Role: domain.RoleViewer, Reason: "read-only access", DurationHrs: 0}, "alice")
+	assert.Equal(t, domain.ApplicationApproved, low.Status)
+	assert.Equal(t, 24, low.DurationHrs)
+
+	high := registry.SubmitApplication(domain.ToolApplicationRequest{Tool: "danger.tool", Risk: domain.RiskCritical, Role: domain.RoleOperator, Reason: "break-glass", DurationHrs: 2}, "bob")
+	assert.Equal(t, domain.ApplicationPending, high.Status)
+
+	apps := registry.Applications()
+	assert.Len(t, apps, 2)
+	apps[0].Status = domain.ApplicationRejected
+	fresh := registry.Applications()
+	assert.Equal(t, domain.ApplicationApproved, fresh[0].Status, "Applications returns a copy")
+
+	rejected, err := registry.RejectApplication(high.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, domain.ApplicationRejected, rejected.Status)
+	assert.Equal(t, "rejected by admin", rejected.Decision)
+	assert.NotNil(t, rejected.DecidedAt)
+
+	_, err = registry.RejectApplication("")
+	assert.ErrorContains(t, err, "application id is required")
+	_, err = registry.RejectApplication("missing-app")
+	assert.ErrorIs(t, err, ErrApplicationNotFound)
+}
+
+func TestRegistry_AccessorStores(t *testing.T) {
+	registry := createTestRegistry()
+	assert.NotNil(t, registry.Users())
+	assert.NotNil(t, registry.JumpServers())
+	created := registry.JumpServers().Add(domain.JumpServerInstance{Name: "jump", BaseURL: "https://jump.example.test", AuthType: domain.JumpServerAuthToken}, "", "", "")
+	got, ok := registry.JumpServers().Get(created.ID)
+	assert.True(t, ok)
+	assert.Equal(t, "jump", got.Name)
+}
